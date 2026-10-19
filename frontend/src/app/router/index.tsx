@@ -1,0 +1,73 @@
+import { createBrowserRouter, Navigate } from 'react-router-dom'
+import RequireAuth from '../../components/common/RequireAuth'
+import AdminLayout from '../../components/layout/AdminLayout'
+import CustomerLayout from '../../components/layout/CustomerLayout'
+import AdminDashboardPage from '../../features/dashboard/AdminDashboardPage'
+import LoginPage from '../../features/auth/LoginPage'
+import RegisterPage from '../../features/auth/RegisterPage'
+import HomePage from '../../features/dashboard/HomePage'
+import UsagePage from '../../features/dashboard/UsagePage'
+import AdminIncidentDetailPage from '../../features/incidents/AdminIncidentDetailPage'
+import AdminIncidentsPage from '../../features/incidents/AdminIncidentsPage'
+import AdminBenefitsPage from '../../features/membership/AdminBenefitsPage'
+import MembershipPage from '../../features/membership/MembershipPage'
+import AdminPaymentsPage from '../../features/payments/AdminPaymentsPage'
+import BillingPage from '../../features/payments/BillingPage'
+import PlansPage from '../../features/plans/PlansPage'
+import ProfileSettingsPage from '../../features/auth/ProfileSettingsPage'
+import AdminSupportDetailPage from '../../features/support/AdminSupportDetailPage'
+import AdminSupportPage from '../../features/support/AdminSupportPage'
+import SupportDetailPage from '../../features/support/SupportDetailPage'
+import SupportPage from '../../features/support/SupportPage'
+import type { Role } from '../../services/types'
+
+const ADMIN_ROLES: Role[] = ['SUPPORT_ADMIN', 'SECURITY_ADMIN']
+
+export const router = createBrowserRouter([
+  { path: '/login', element: <LoginPage /> },
+  { path: '/register', element: <RegisterPage /> },
+  {
+    element: <RequireAuth />,
+    children: [{
+      element: <CustomerLayout />,
+      children: [
+        { index: true, element: <HomePage /> },
+        { path: 'usage', element: <UsagePage /> },
+        { path: 'plans', element: <PlansPage /> },
+        { path: 'billing', element: <BillingPage /> },
+        { path: 'membership', element: <MembershipPage /> },
+        { path: 'support', element: <SupportPage /> },
+        { path: 'support/:id', element: <SupportDetailPage /> },
+        { path: 'settings', element: <ProfileSettingsPage /> },
+      ],
+    }],
+  },
+  {
+    path: '/admin',
+    element: <RequireAuth roles={ADMIN_ROLES} />,
+    children: [{
+      element: <AdminLayout />,
+      children: [
+        { index: true, element: <AdminDashboardPage /> },
+        { path: 'settings', element: <ProfileSettingsPage /> },
+        {
+          element: <RequireAuth roles={['SECURITY_ADMIN']} />,
+          children: [
+            { path: 'incidents', element: <AdminIncidentsPage /> },
+            { path: 'incidents/:id', element: <AdminIncidentDetailPage /> },
+          ],
+        },
+        {
+          element: <RequireAuth roles={['SUPPORT_ADMIN']} />,
+          children: [
+            { path: 'support', element: <AdminSupportPage /> },
+            { path: 'support/:id', element: <AdminSupportDetailPage /> },
+            { path: 'payments', element: <AdminPaymentsPage /> },
+            { path: 'benefits', element: <AdminBenefitsPage /> },
+          ],
+        },
+      ],
+    }],
+  },
+  { path: '*', element: <Navigate to="/" replace /> },
+])
