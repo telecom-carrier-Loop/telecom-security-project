@@ -129,6 +129,22 @@ powershell -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure/tools/s
 
 ## 7. 종료·재시작·문제 보고
 
+### Windows PowerShell 5.1 준비 검사 오류 수정
+
+초기 도구를 PowerShell 7에서만 실행 검증해 Windows PowerShell 5.1의 인수 전달 차이를 놓쳤습니다. MySQL이 정상 실행 중이어도 `docker exec sh -c`의 중첩 따옴표가 깨져 SQL 검사가 실패하고 `MySQL is not ready`로 표시될 수 있었습니다. 5.1에서 셸 문법 오류, 7에서 SELECT 1 성공을 동일 컨테이너로 재현했습니다.
+
+수정 도구는 컨테이너에 포함한 mysql-local을 직접 호출하며 SQL만 표준 입력으로 전달합니다. 기존 비밀번호·인증서·named volume은 유지합니다. 같은 오류를 겪은 PC1에서는 최신 infra/pc-compose를 받은 뒤 아래 두 명령으로 이미지를 다시 빌드하고 이어서 초기화합니다. prepare-primary나 인증서 재생성·데이터 삭제는 필요하지 않습니다.
+
+```powershell
+git fetch origin
+git switch infra/pc-compose
+git pull --ff-only origin infra/pc-compose
+powershell -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure/tools/shared-pc.ps1 -Action up -Role pc1
+powershell -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure/tools/shared-pc.ps1 -Action bootstrap-primary -Role pc1
+```
+
+방화벽 규칙의 PrimaryStatus=OK는 등록 성공이며 이 SQL 검사 오류와 별개입니다. 실제 PC2의 TCP 접속은 5단계에서 확인합니다. 수정 후에도 준비 검사가 실패하면 마지막 비밀값을 제외한 오류 번호와 컨테이너 상태부터 확인합니다.
+
 각 PC의 역할에 맞게 중지합니다. 데이터·비밀번호·인증서를 보존합니다.
 
 ```powershell

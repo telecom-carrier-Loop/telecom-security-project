@@ -64,8 +64,7 @@ function Invoke-Compose([string[]]$CommandArgs) {
     Invoke-Docker ((Get-ComposeArguments) + $CommandArgs)
 }
 function Invoke-Db([string]$Query, [switch]$ExpectReadOnly) {
-    $command = 'MYSQL_PWD="$(cat /run/secrets/root-password)" exec mysql --protocol=socket -uroot --batch --skip-column-names'
-    $arguments = (Get-ComposeArguments) + @('exec', '-T', 'mysql', 'sh', '-c', $command)
+    $arguments = (Get-ComposeArguments) + @('exec', '-T', 'mysql', '/usr/local/bin/mysql-local')
     $oldPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     $OutputEncoding = $Utf8
@@ -86,11 +85,12 @@ function Invoke-Db([string]$Query, [switch]$ExpectReadOnly) {
     return $text.Trim()
 }
 function Wait-Database {
+    $lastFailure = 'No SQL response received.'
     for ($attempt = 0; $attempt -lt 60; $attempt++) {
-        try { if ((Invoke-Db 'SELECT 1;') -eq '1') { return } } catch { }
+        try { if ((Invoke-Db 'SELECT 1;') -eq '1') { return } } catch { $lastFailure = $_.Exception.Message }
         Start-Sleep -Seconds 2
     }
-    throw 'MySQL is not ready. Inspect this project container locally; do not publish raw logs.'
+    throw "MySQL readiness check failed. Last sanitized check: $lastFailure Inspect the project locally; do not publish raw logs."
 }
 function Read-ReplicationPassword {
     $value = [IO.File]::ReadAllText((Join-Path $NodeDirectory 'replication-password')).Trim()
