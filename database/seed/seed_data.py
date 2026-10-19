@@ -49,8 +49,7 @@ def seed_data():
 
     alice = make_user("alice@test.local", "김하늘")
     bob = make_user("bob@test.local", "이바다")
-    make_user("support@test.local", "상담관리자", "SUPPORT_ADMIN")
-    sec = make_user("security@test.local", "보안관리자", "SECURITY_ADMIN")
+    sec = make_user("admin@test.local", "관리자", "ADMIN")  # 상담·보안 업무를 함께 보는 통합 관리자
 
     today = date.today()
     period = today.strftime("%Y-%m")

@@ -243,3 +243,46 @@ textarea { resize: vertical; }
 .panel > form.form { width: 100%; display: flex; flex-direction: column; align-items: flex-start; }
 .evidence { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem 0.75rem; overflow-x: auto; width: 100%; margin: 0.5rem 0 0; }
 .input--sm { width: 7rem; padding: 0.35rem 0.5rem; }
+
+/* ---------- 상담 관리자: 문의 분할 화면 · 회원 목록 / 요금제 카드 ---------- */
+main:has(.page--wide) { max-width: 1400px; }
+.split { display: grid; grid-template-columns: minmax(280px, 2fr) 3fr; gap: 1rem; align-items: start; }
+.split__detail { position: sticky; top: 1rem; }
+.rows__item--stack { display: flex; flex-direction: column; align-items: stretch; gap: 0.25rem; }
+.rows__top { display: flex; justify-content: space-between; gap: 0.75rem; align-items: center; }
+.rows__preview { color: var(--ink-soft); font-size: 0.875rem; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.rows__item.is-selected { background: color-mix(in srgb, var(--signal) 8%, var(--surface)); box-shadow: inset 3px 0 0 var(--signal); }
+.ticket-panel .thread { margin: 0.5rem 0 1rem; width: 100%; }
+.ticket-panel .form { width: 100%; }
+.searchbar { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; max-width: 560px; }
+.searchbar input { flex: 1; }
+.pager { justify-content: center; margin-top: 1rem; }
+
+.plan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.plan-card { font: inherit; text-align: left; cursor: pointer; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 1.1rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.plan-card:hover { border-color: var(--signal); }
+.plan-card--selected { border-color: var(--signal); box-shadow: 0 0 0 2px color-mix(in srgb, var(--signal) 30%, transparent); }
+.plan-card--mine { background: color-mix(in srgb, var(--signal) 5%, var(--surface)); }
+.plan-card__net { font-size: 0.75rem; color: var(--ink-soft); }
+.plan-card__name { font-weight: 600; font-size: 1.05rem; }
+.plan-card__data { font-size: 1.6rem; font-weight: 600; color: var(--signal); font-variant-numeric: tabular-nums; }
+.plan-card__fee { color: var(--ink-soft); }
+.plan-card .tag { align-self: flex-start; margin-top: 0.25rem; }
+.compare th { width: 7rem; }
+
+@media (max-width: 960px) {
+  .split { grid-template-columns: 1fr; }
+  .split__detail { position: static; }
+}
+
+/* ---------- 관제 도구 바로가기 ---------- */
+.nav__heading { margin: 0 0 0.25rem; padding: 0 0.75rem; font-size: 0.75rem; letter-spacing: 0.04em; opacity: 0.6; }
+.nav__external { display: flex; justify-content: space-between; }
+.nav__disabled { opacity: 0.45; cursor: not-allowed; font-size: 0.85rem; }
+.tool-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+.tool-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem 1.1rem;
+  display: flex; flex-direction: column; gap: 0.3rem; color: inherit; text-decoration: none; }
+a.tool-card:hover { border-color: var(--signal); }
+.tool-card--off { border-style: dashed; opacity: 0.75; }
+.tool-card__url { font-size: 0.78rem; color: var(--ink-soft); word-break: break-all; }

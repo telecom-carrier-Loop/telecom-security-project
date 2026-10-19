@@ -18,7 +18,7 @@ def test_token_required(client):
 
 
 def test_admin_session_cannot_use_internal_api(client):
-    login(client, "security@test.local")
+    login(client, "admin@test.local")
     assert client.post(URL, json=EVENT, headers=csrf(client)).status_code == 401
 
 
@@ -56,17 +56,14 @@ def test_invalid_event_422(client):
     assert res.status_code == 422 and {"severity", "detected_at", "asset"} <= set(res.json["error"]["details"])
 
 
-def test_only_security_admin(client):
-    login(client, "support@test.local")
-    assert client.get("/api/admin/incidents").status_code == 403
-    logout(client)
+def test_only_admin(client):
     login(client, "alice@test.local")
     assert client.get("/api/admin/incidents").status_code == 403
 
 
 def test_status_flow_and_history(client):
     inc_id = client.post(URL, json=EVENT, headers=TOKEN).json["data"]["incident_id"]
-    login(client, "security@test.local")
+    login(client, "admin@test.local")
     me = client.get("/api/admin/incidents/assignees").json["data"]["assignees"][0]
     data = client.patch(f"/api/admin/incidents/{inc_id}", json={"status": "INVESTIGATING", "assigned_to": me["id"]},
                         headers=csrf(client)).json["data"]["incident"]
@@ -81,7 +78,7 @@ def test_status_flow_and_history(client):
 
 
 def test_manual_create_and_assign_validation(client):
-    login(client, "security@test.local")
+    login(client, "admin@test.local")
     res = client.post("/api/admin/incidents", json={"title": "수동 보고", "severity": "low"}, headers=csrf(client))
     assert res.status_code == 201 and res.json["data"]["incident"]["source"] == "manual"
     assert client.patch("/api/admin/incidents/1", json={"assigned_to": 1}, headers=csrf(client)).status_code == 422

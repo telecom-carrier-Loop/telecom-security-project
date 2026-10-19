@@ -19,7 +19,7 @@ class User(TimestampMixin, db.Model):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(50), nullable=False)
-    # CUSTOMER / SUPPORT_ADMIN / SECURITY_ADMIN (공개 가입은 항상 CUSTOMER)
+    # CUSTOMER / ADMIN (공개 가입은 항상 CUSTOMER, 관리자는 비공개 프로비저닝)
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="CUSTOMER")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # 계정 보안 정보 (홈·프로필에 표시)

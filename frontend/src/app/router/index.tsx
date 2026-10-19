@@ -3,6 +3,8 @@ import RequireAuth from '../../components/common/RequireAuth'
 import AdminLayout from '../../components/layout/AdminLayout'
 import CustomerLayout from '../../components/layout/CustomerLayout'
 import AdminDashboardPage from '../../features/dashboard/AdminDashboardPage'
+import AdminCustomerDetailPage from '../../features/auth/AdminCustomerDetailPage'
+import AdminCustomersPage from '../../features/auth/AdminCustomersPage'
 import LoginPage from '../../features/auth/LoginPage'
 import RegisterPage from '../../features/auth/RegisterPage'
 import HomePage from '../../features/dashboard/HomePage'
@@ -15,13 +17,12 @@ import AdminPaymentsPage from '../../features/payments/AdminPaymentsPage'
 import BillingPage from '../../features/payments/BillingPage'
 import PlansPage from '../../features/plans/PlansPage'
 import ProfileSettingsPage from '../../features/auth/ProfileSettingsPage'
-import AdminSupportDetailPage from '../../features/support/AdminSupportDetailPage'
 import AdminSupportPage from '../../features/support/AdminSupportPage'
 import SupportDetailPage from '../../features/support/SupportDetailPage'
 import SupportPage from '../../features/support/SupportPage'
 import type { Role } from '../../services/types'
 
-const ADMIN_ROLES: Role[] = ['SUPPORT_ADMIN', 'SECURITY_ADMIN']
+const ADMIN_ROLES: Role[] = ['ADMIN']
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -50,22 +51,14 @@ export const router = createBrowserRouter([
       children: [
         { index: true, element: <AdminDashboardPage /> },
         { path: 'settings', element: <ProfileSettingsPage /> },
-        {
-          element: <RequireAuth roles={['SECURITY_ADMIN']} />,
-          children: [
-            { path: 'incidents', element: <AdminIncidentsPage /> },
-            { path: 'incidents/:id', element: <AdminIncidentDetailPage /> },
-          ],
-        },
-        {
-          element: <RequireAuth roles={['SUPPORT_ADMIN']} />,
-          children: [
-            { path: 'support', element: <AdminSupportPage /> },
-            { path: 'support/:id', element: <AdminSupportDetailPage /> },
-            { path: 'payments', element: <AdminPaymentsPage /> },
-            { path: 'benefits', element: <AdminBenefitsPage /> },
-          ],
-        },
+        { path: 'incidents', element: <AdminIncidentsPage /> },
+        { path: 'incidents/:id', element: <AdminIncidentDetailPage /> },
+        { path: 'support', element: <AdminSupportPage /> },
+        { path: 'support/:id', element: <AdminSupportPage /> },
+        { path: 'customers', element: <AdminCustomersPage /> },
+        { path: 'customers/:id', element: <AdminCustomerDetailPage /> },
+        { path: 'payments', element: <AdminPaymentsPage /> },
+        { path: 'benefits', element: <AdminBenefitsPage /> },
       ],
     }],
   },

@@ -2,7 +2,7 @@
 from flask import Blueprint
 
 from ..core.errors import ApiError
-from ..core.permissions import ROLE_SUPPORT_ADMIN, current_user, login_required, object_denied, roles_required
+from ..core.permissions import ROLE_ADMIN, current_user, login_required, object_denied, roles_required
 from ..core.responses import ok
 from ..core.validation import body, idempotency_key, raise_if, text
 from ..extensions import db
@@ -67,7 +67,7 @@ def get_payment(payment_id):
 # ---------- 상담(결제) 관리자 ----------
 
 @bp.get("/admin/payments")
-@roles_required(ROLE_SUPPORT_ADMIN)
+@roles_required(ROLE_ADMIN)
 def admin_payments():
     rows = Payment.query.order_by(Payment.id.desc()).limit(100).all()
     out = []
@@ -79,7 +79,7 @@ def admin_payments():
 
 
 @bp.post("/admin/payments/<int:payment_id>/refund")
-@roles_required(ROLE_SUPPORT_ADMIN)
+@roles_required(ROLE_ADMIN)
 def admin_refund(payment_id):
     payment = db.session.get(Payment, payment_id)
     if payment is None:

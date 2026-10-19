@@ -74,7 +74,7 @@ def test_refund_by_support_admin_reverses_points(client):
     pid = _pay(client, {"invoice_id": inv_id, "card_number": APPROVE}, "pay-ref-00001").json["data"]["payment"]["id"]
     assert client.post(f"/api/admin/payments/{pid}/refund", json={"reason": "셀프"}, headers=csrf(client)).status_code == 403
     logout(client)
-    login(client, "support@test.local")
+    login(client, "admin@test.local")
     res = client.post(f"/api/admin/payments/{pid}/refund", json={"reason": "중복 청구 확인"}, headers=csrf(client))
     assert res.json["data"]["payment"]["status"] == "REFUNDED"
     assert db.session.get(Invoice, inv_id).status == "UNPAID" and _points(1) == 12000

@@ -8,7 +8,7 @@ import { useApi } from '../../utils/useApi'
 
 const TIER = ['Basic', 'Silver', 'Gold', 'VIP']
 
-// 멤버십 정책 관리 (SUPPORT_ADMIN). 고객 포인트 잔액을 직접 바꾸는 기능은 일부러 없다.
+// 멤버십 정책 관리 (관리자). 고객 포인트 잔액을 직접 바꾸는 기능은 일부러 없다.
 export default function AdminBenefitsPage() {
   const { loading, error, data, reload } = useApi<{ benefits: BenefitPolicy[] }>('/admin/membership/benefits')
   const [drafts, setDrafts] = useState<Record<number, Partial<BenefitPolicy>>>({})

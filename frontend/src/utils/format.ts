@@ -23,7 +23,7 @@ export const dateTime = (iso: string | null | undefined) =>
 export const fullDate = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: 'long', day: 'numeric' }) : '-'
 
-export const ROLE_LABEL: Record<string, string> = { CUSTOMER: '고객', SUPPORT_ADMIN: '상담 관리자', SECURITY_ADMIN: '보안 관리자' }
+export const ROLE_LABEL: Record<string, string> = { CUSTOMER: '고객', ADMIN: '관리자' }
 
 export const TICKET_STATUS: Record<string, string> = { OPEN: '접수', IN_PROGRESS: '상담 중', ANSWERED: '답변 완료', CLOSED: '종료' }
 export const INCIDENT_STATUS: Record<string, string> = { OPEN: '신규', INVESTIGATING: '조사 중', RESOLVED: '해결', CLOSED: '종료' }

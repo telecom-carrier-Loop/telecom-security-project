@@ -3,7 +3,7 @@ from flask import Blueprint
 
 from ..core.errors import not_found
 from ..core.logging import app_log
-from ..core.permissions import ROLE_SUPPORT_ADMIN, current_user, login_required, roles_required
+from ..core.permissions import ROLE_ADMIN, current_user, login_required, roles_required
 from ..core.responses import ok
 from ..core.validation import body, idempotency_key, raise_if
 from ..extensions import db
@@ -102,19 +102,19 @@ def redeem(benefit_id):
                "replayed": not created}, 201 if created else 200)
 
 
-# ---------- 멤버십 정책 관리 (SUPPORT_ADMIN) — 잔액 직접 수정 API는 만들지 않는다 ----------
+# ---------- 멤버십 정책 관리 (ADMIN) — 잔액 직접 수정 API는 만들지 않는다 ----------
 
 admin_bp = Blueprint("membership_admin", __name__, url_prefix="/api/admin/membership")
 
 
 @admin_bp.get("/benefits")
-@roles_required(ROLE_SUPPORT_ADMIN)
+@roles_required(ROLE_ADMIN)
 def admin_benefits():
     return ok({"benefits": [b.to_dict() for b in Benefit.query.order_by(Benefit.id).all()]})
 
 
 @admin_bp.patch("/benefits/<int:benefit_id>")
-@roles_required(ROLE_SUPPORT_ADMIN)
+@roles_required(ROLE_ADMIN)
 def admin_update_benefit(benefit_id):
     benefit = db.session.get(Benefit, benefit_id)
     if benefit is None:

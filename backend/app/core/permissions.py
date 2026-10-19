@@ -1,6 +1,10 @@
 """인증·권한. 사용자는 항상 서버 세션에서 꺼낸다 (요청에 들어온 user_id는 믿지 않음).
 
 401 = 로그인 없음, 403 = 역할 거부·CSRF 실패, 404 = 남의 객체 (통합 기준 7절)
+
+역할: CUSTOMER / ADMIN
+  팀 결정으로 상담 관리자(SUPPORT_ADMIN)와 보안 관리자(SECURITY_ADMIN)를 ADMIN 하나로 통합했다.
+  (integration-baseline 7절의 3역할 구성과 다르므로 계약 문서 갱신 필요)
 """
 from functools import wraps
 from urllib.parse import urlsplit
@@ -12,9 +16,8 @@ from .logging import security_event
 from .sessions import csrf_ok
 
 ROLE_CUSTOMER = "CUSTOMER"
-ROLE_SUPPORT_ADMIN = "SUPPORT_ADMIN"
-ROLE_SECURITY_ADMIN = "SECURITY_ADMIN"
-ADMIN_ROLES = (ROLE_SUPPORT_ADMIN, ROLE_SECURITY_ADMIN)
+ROLE_ADMIN = "ADMIN"
+ADMIN_ROLES = (ROLE_ADMIN,)
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
 
 

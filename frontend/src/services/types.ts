@@ -1,6 +1,6 @@
 // API 응답 데이터 타입 (docs/contracts/*-api.md 와 backend 응답 기준)
 
-export type Role = 'CUSTOMER' | 'SUPPORT_ADMIN' | 'SECURITY_ADMIN'
+export type Role = 'CUSTOMER' | 'ADMIN'
 
 export interface User {
   id: number
@@ -67,7 +67,11 @@ export interface TicketSummary {
   status: TicketStatus
   created_at: string
   updated_at: string
+  category_label?: string
   customer_name?: string
+  customer?: { id: number; name: string; email: string }
+  content?: string
+  reply_count?: number
 }
 
 export interface Ticket extends TicketSummary {
@@ -166,4 +170,40 @@ export interface AdminDashboard {
   support: { waiting: number; oldest: TicketSummary[] }
   billing: { unpaid_count: number; unpaid_amount: number }
   incidents: { open: number; by_severity: Record<Severity, number> }
+}
+
+export interface CustomerRow {
+  id: number
+  name: string
+  email: string
+  is_active: boolean
+  created_at: string
+  last_login_at: string | null
+  plan: string | null
+  membership: string | null
+  unpaid_amount: number
+  open_tickets: number
+}
+
+export interface CustomerDetail {
+  id: number
+  name: string
+  email: string
+  is_active: boolean
+  created_at: string
+  last_login_at: string | null
+  subscription: { phone_number: string; plan: Plan; started_on: string } | null
+  membership: { tier: string; point_balance: number } | null
+  unpaid_amount: number
+  invoices: Invoice[]
+  tickets: { id: number; title: string; status: TicketStatus; created_at: string }[]
+  payments: Payment[]
+}
+
+export interface MonitoringLink {
+  key: string
+  name: string
+  url: string | null
+  description: string
+  env: string
 }

@@ -5,7 +5,7 @@
   - (source, event_id) UNIQUE + 정규화 본문 해시
     최초 201 / 같은 키·같은 원본 200 deduplicated=true / 같은 키·다른 원본 409 / 입력 오류 422
   - 공개·관리 Nginx 모두 /api/internal 을 외부에 노출하지 않는다 (C·B)
-수동 업무: /api/admin/incidents/*, SECURITY_ADMIN 전용
+수동 업무: /api/admin/incidents/*, ADMIN 전용
 상태: OPEN → INVESTIGATING → RESOLVED → CLOSED, RESOLVED → INVESTIGATING 재개
 """
 import hashlib
@@ -19,7 +19,7 @@ from flask import Blueprint, current_app, request
 from sqlalchemy.exc import IntegrityError
 
 from ..core.errors import ApiError, not_found, validation_error
-from ..core.permissions import ROLE_SECURITY_ADMIN, current_user, roles_required
+from ..core.permissions import ROLE_ADMIN, current_user, roles_required
 from ..core.responses import ok
 from ..core.validation import body, raise_if, text
 from ..extensions import db
@@ -173,10 +173,10 @@ def internal_incident_event():
               201 if created else 200)
 
 
-# ---------- 보안 관리자 ----------
+# ---------- 관리자 ----------
 
 @bp.get("/admin/incidents")
-@roles_required(ROLE_SECURITY_ADMIN)
+@roles_required(ROLE_ADMIN)
 def admin_list():
     query = SecurityIncident.query
     status, severity = request.args.get("status"), request.args.get("severity")
@@ -191,14 +191,14 @@ def admin_list():
 
 
 @bp.get("/admin/incidents/assignees")
-@roles_required(ROLE_SECURITY_ADMIN)
+@roles_required(ROLE_ADMIN)
 def assignees():
-    users = User.query.filter_by(role=ROLE_SECURITY_ADMIN, is_active=True).order_by(User.name).all()
+    users = User.query.filter_by(role=ROLE_ADMIN, is_active=True).order_by(User.name).all()
     return ok({"assignees": [{"id": u.id, "name": u.name} for u in users]})
 
 
 @bp.post("/admin/incidents")
-@roles_required(ROLE_SECURITY_ADMIN)
+@roles_required(ROLE_ADMIN)
 def admin_create():
     data = body()
     event = {"schema_version": "1.0", "source": "manual", "event_id": f"manual-{uuid.uuid4().hex[:16]}",
@@ -206,7 +206,7 @@ def admin_create():
              "detected_at": data.get("detected_at") or utcnow().isoformat() + "Z",
              "severity": data.get("severity"), "title": data.get("title"),
              "asset": data.get("asset") or {}, "description": data.get("description")}
-    incident, _ = create_or_get(validate_event(event), actor_id=current_user().id, note="보안 관리자가 직접 등록")
+    incident, _ = create_or_get(validate_event(event), actor_id=current_user().id, note="관리자가 직접 등록")
     return ok({"incident": incident_dict(incident, detail=True)}, 201)
 
 
@@ -218,13 +218,13 @@ def _get(incident_id):
 
 
 @bp.get("/admin/incidents/<int:incident_id>")
-@roles_required(ROLE_SECURITY_ADMIN)
+@roles_required(ROLE_ADMIN)
 def admin_get(incident_id):
     return ok({"incident": incident_dict(_get(incident_id), detail=True)})
 
 
 @bp.patch("/admin/incidents/<int:incident_id>")
-@roles_required(ROLE_SECURITY_ADMIN)
+@roles_required(ROLE_ADMIN)
 def admin_update(incident_id):
     incident, data, actor = _get(incident_id), body(), current_user()
     changes = []
@@ -242,8 +242,8 @@ def admin_update(incident_id):
         user = None
         if target is not None:
             user = db.session.get(User, target) if isinstance(target, int) and not isinstance(target, bool) else None
-            if user is None or user.role != ROLE_SECURITY_ADMIN or not user.is_active:
-                raise validation_error({"assigned_to": "보안 관리자만 담당자로 지정할 수 있습니다."})
+            if user is None or user.role != ROLE_ADMIN or not user.is_active:
+                raise validation_error({"assigned_to": "관리자만 담당자로 지정할 수 있습니다."})
         if target != incident.assigned_to:
             incident.assigned_to = target
             changes.append(("ASSIGNED", "담당자 해제" if user is None else f"담당자: {user.name}"))
@@ -257,7 +257,7 @@ def admin_update(incident_id):
 
 
 @bp.post("/admin/incidents/<int:incident_id>/histories")
-@roles_required(ROLE_SECURITY_ADMIN)
+@roles_required(ROLE_ADMIN)
 def admin_note(incident_id):
     incident = _get(incident_id)
     errors: dict = {}
