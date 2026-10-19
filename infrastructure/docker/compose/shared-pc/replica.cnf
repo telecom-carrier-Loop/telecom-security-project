@@ -1,0 +1,6 @@
+[mysqld]
+server_id=2
+relay_log=relay-bin
+read_only=ON
+# First-time official-image initialization needs writes. The controller applies
+# PERSIST super_read_only=ON before starting the replication channel.
