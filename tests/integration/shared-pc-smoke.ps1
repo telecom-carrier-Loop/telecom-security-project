@@ -31,6 +31,12 @@ networks:
 services:
   mysql:
     extra_hosts: !reset []
+    volumes:
+      - type: bind
+        source: $($secretDirectory.Replace('\','/'))/pc2/client-check.cnf
+        target: /run/secrets/client-check.cnf
+        read_only: true
+        bind: {create_host_path: false}
 networks:
   default:
     external: true
@@ -47,6 +53,10 @@ try {
     Write-Output "TEST_SECRET_DIRECTORY=$secretDirectory"
     & $controller -Action prepare-primary @primary
     & $controller -Action prepare-replica @replica -TransferDirectory (Join-Path $secretDirectory 'pc2-transfer')
+    # Test-only option file, mounted separately; no credentials on process argv.
+    $replicationPassword = [IO.File]::ReadAllText((Join-Path $secretDirectory 'pc2/replication-password'))
+    [IO.File]::WriteAllText((Join-Path $secretDirectory 'pc2/client-check.cnf'),
+        "[client]`nuser=telecom_repl`npassword=$replicationPassword`nhost=mysql-primary.telecom.test`nssl-mode=VERIFY_IDENTITY`nssl-ca=/run/mysql-tls/ca.crt`n",$utf8)
     & $controller -Action up @primary
     & $controller -Action bootstrap-primary @primary
     & $controller -Action up @replica
@@ -58,12 +68,10 @@ try {
     & $controller -Action verify @replica -ProbeId $probeId
     # The same valid credentials without the PC2 client certificate must fail.
     $replicaContainer = "$replicaProject-mysql-1"
-    $client = 'read -r MYSQL_PWD; export MYSQL_PWD; exec mysql --protocol=TCP -h mysql-primary.telecom.test -utelecom_repl --ssl-mode=VERIFY_IDENTITY --ssl-ca=/run/mysql-tls/ca.crt --connect-timeout=5 --batch --skip-column-names -e "SELECT 1"'
-    $replicationPassword = [IO.File]::ReadAllText((Join-Path $secretDirectory 'pc2/replication-password'))
     $oldPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        $negative = @($replicationPassword | docker exec -i $replicaContainer sh -c $client 2>&1) | Out-String
+        $negative = @(docker exec $replicaContainer mysql --defaults-extra-file=/run/secrets/client-check.cnf --protocol=TCP --connect-timeout=5 --batch --skip-column-names -e 'SELECT 1' 2>&1) | Out-String
         $negativeCode = $LASTEXITCODE
     } finally { $ErrorActionPreference = $oldPreference }
     if ($negativeCode -eq 0 -or $negative -notmatch 'ERROR 1045') { throw 'Missing-client-certificate connection was not rejected.' }
