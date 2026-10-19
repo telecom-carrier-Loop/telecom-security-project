@@ -4,9 +4,11 @@ React·Flask·MySQL 고객 포털에 네트워크 접근 통제, 보안 관제, 
 
 ## 현재 상태
 
-기본 디렉터리와 개발 계약, 인프라 담당자의 Docker·로컬 Compose·MySQL 복제 실습·백업 및 k3s/Nginx/Keepalived 템플릿을 준비했습니다. A 앱 코드와 의존성·잠금 파일은 아직 없으며 실제 공용 PC에는 적용하지 않았습니다. 격리된 DB 실습은 실행할 수 있지만 앱 전체 서비스는 아직 실행할 수 없습니다.
+기본 디렉터리와 개발 계약, 인프라 담당자의 Docker·Compose·MySQL 복제 실습·백업 및 k3s/Nginx/Keepalived 템플릿을 준비했습니다. 웹·API·Migration 초안도 main에 추가되었습니다. 앱 전체의 Docker 연동 및 실제 공용 PC 적용은 별도 검증 단계입니다.
 
 인프라 담당자는 [개발·실습 시작 가이드](docs/operations/infra-start-here.md)와 [검증 기록](docs/operations/infra-verification.md)부터 확인합니다.
+
+공용 PC 두 대는 Windows Docker Desktop과 학원망을 사용합니다. 현재 주소에 맞춘 [두 PC MySQL 복제 실행 가이드](docs/operations/shared-pc-docker.md)를 먼저 진행하며 별도 Ubuntu VM 설치를 전제로 하지 않습니다.
 
 ## 먼저 읽기
 

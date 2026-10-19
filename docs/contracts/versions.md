@@ -9,6 +9,8 @@
 
 Docker Engine 28.5.1 / Compose 2.40.3-desktop.1. 아래 나머지 값은 기술 계열이며 실행 검증 통과 표시가 아닙니다. [검증 범위](../operations/infra-verification.md)를 확인합니다.
 
+공용 PC 사용자 보고(2026-10-19): Docker Desktop 4.87.0 / Engine 29.7.2 / Compose 5.4.0 / WSL 2.7.11.0. 두 PC의 hello-world 성공을 확인했으며, 이 정보가 MySQL 두 호스트 복제나 앱 연동의 통과를 의미하지는 않습니다. 공용 PC DB는 위에서 검증한 MySQL digest를 사용합니다.
+
 | 대상 | 기준 계열 | 최초 검증 PR에서 남길 내용 |
 |---|---|---|
 | OS | Ubuntu Server 24.04 LTS | 패치·장비 이미지 |
