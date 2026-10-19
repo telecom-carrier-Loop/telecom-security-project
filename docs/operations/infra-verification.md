@@ -48,6 +48,14 @@
 
 ## 재현 명령
 
+### Windows PowerShell 5.1 오류 재현·수정
+
+사용자 공용 PC의 `MySQL is not ready` 보고를 확인한 뒤 같은 컨테이너로 비교했습니다. 최초 검증 셸은 PowerShell 7.6.5였고, Windows PowerShell 5.1.26100.9711에서는 중첩 따옴표를 포함한 `docker exec sh -c` 인수가 깨져 셸 종료 코드 2가 발생했습니다. 같은 SELECT 1이 7에서는 성공하여 검사 도구의 호환성 문제임을 재현했습니다.
+
+수정: Linux 이미지에 mysql-local 래퍼를 포함하고 Docker exec에서 파일을 직접 실행합니다. SQL은 표준 입력, 비밀번호는 컨테이너 내부 파일로만 전달합니다. 준비 검사 실패 시 마지막 비밀값을 제외한 오류 번호도 남깁니다. 통합 시험의 인증서 누락 검사도 중첩 셸 인수를 제거했습니다.
+
+Windows PowerShell 5.1에서 `powershell -NoProfile -ExecutionPolicy RemoteSigned -File tests/integration/shared-pc-smoke.ps1` 실행 결과: 준비 검사·최초 복제·중복 연결·합성 행·읽기 전용 쓰기 거절·인증서 누락 및 서버 이름 불일치 거절·Replica 재시작 자동 복귀 모두 PASS. 기존 사용자 데이터·키·인증서 삭제는 필요하지 않습니다. 실제 공용 PC는 최신 코드로 이미지를 재빌드한 뒤 사용자 실행 결과를 확인해야 합니다.
+
 저장소 루트에서 실행합니다. 비밀값이 출력되는 전체 Compose config 또는 원본 DB 로그는 검증 증거로 올리지 않습니다.
 
 ```powershell
