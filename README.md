@@ -1,4 +1,4 @@
-+# Telecom carrier Loop — 통신사 보안 프로젝트
+# Telecom carrier Loop — 통신사 보안 프로젝트
 
 React·Flask·MySQL 고객 포털에 네트워크 접근 통제, 보안 관제, 인시던트 자동화와 장애 복구 실습을 연결하는 4인 Monorepo입니다.
 
