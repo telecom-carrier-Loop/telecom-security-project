@@ -1,0 +1,25 @@
+# Render separately, once per release. NOT included in base/kustomization.yaml.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: telecom-migrate-REPLACE_WITH_RELEASE
+  namespace: telecom
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+        - name: migrate
+          image: ghcr.io/telecom-carrier-loop/telecom-migrate:REPLACE_WITH_COMMIT_SHA
+          envFrom:
+            - configMapRef: {name: telecom-runtime}
+            # A separate DDL-capable migration account, never the app secret.
+            - secretRef: {name: telecom-migration-secrets}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}

@@ -1,0 +1,25 @@
+# Replace VLAN10 NIC. Install root-owned check script with mode 0755 first.
+global_defs {
+    router_id TELECOM_PC1
+    script_user root
+    enable_script_security
+}
+vrrp_script chk_edge {
+    script "/etc/keepalived/check-edge.sh"
+    interval 2
+    timeout 2
+    fall 3
+    rise 2
+    weight 0
+}
+vrrp_instance TELECOM_WEB {
+    state MASTER
+    interface REPLACE_WITH_VLAN10_INTERFACE
+    virtual_router_id 51
+    priority 150
+    advert_int 1
+    unicast_src_ip 192.168.10.11
+    unicast_peer { 192.168.10.12 }
+    virtual_ipaddress { 192.168.10.100/24 }
+    track_script { chk_edge }
+}

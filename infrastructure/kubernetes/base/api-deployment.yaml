@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telecom-api
+  namespace: telecom
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 0, maxUnavailable: 1}
+  selector:
+    matchLabels: {app: telecom-api}
+  template:
+    metadata:
+      labels: {app: telecom-api}
+    spec:
+      automountServiceAccountToken: false
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels: {app: telecom-api}
+              topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: api
+          # Replace with a built, verified image digest before applying.
+          image: ghcr.io/telecom-carrier-loop/telecom-api:REPLACE_WITH_COMMIT_SHA
+          ports: [{name: http, containerPort: 5000}]
+          envFrom:
+            - configMapRef: {name: telecom-runtime}
+            - secretRef: {name: telecom-api-secrets}
+          startupProbe:
+            httpGet: {path: /api/health/live, port: http}
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: {path: /api/health/live, port: http}
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: {path: /api/health/ready, port: http}
+            periodSeconds: 5
+          resources:
+            requests: {cpu: 200m, memory: 256Mi}
+            limits: {cpu: "1", memory: 1Gi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes:
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 64Mi}

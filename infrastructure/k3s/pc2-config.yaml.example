@@ -1,0 +1,8 @@
+# Node token file is provisioned privately; never commit its contents.
+server: https://192.168.20.11:6443
+token-file: /etc/rancher/k3s/node-token
+node-name: telecom-pc2
+node-ip: 192.168.20.12
+flannel-iface: REPLACE_WITH_VLAN20_INTERFACE
+kube-proxy-arg:
+  - nodeport-addresses=192.168.20.0/24

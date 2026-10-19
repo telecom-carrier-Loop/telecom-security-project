@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: telecom-runtime
+  namespace: telecom
+data:
+  APP_ENV: lab
+  DB_HOST: 192.168.30.100
+  DB_PORT: "3306"
+  DB_NAME: telecom
+  DB_USER: telecom_app
+  LOG_LEVEL: INFO
+  LOG_FORMAT: json
