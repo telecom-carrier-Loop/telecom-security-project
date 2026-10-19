@@ -1,0 +1,9 @@
+# Copy outside Git, chmod 600, and fill locally. Never commit the populated copy.
+[client]
+host=192.168.30.100
+port=3306
+user=telecom_backup
+password=REPLACE_LOCALLY
+ssl-mode=VERIFY_IDENTITY
+ssl-ca=/etc/mysql/tls/ca.crt
+# The DB VIP IP must be present in the source server certificate SAN.

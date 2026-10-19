@@ -1,0 +1,17 @@
+# For an already initialized/restored data directory, NOT first-time image bootstrap.
+[mysqld]
+server_id=2
+log_bin=mysql-bin
+relay_log=relay-bin
+gtid_mode=ON
+enforce_gtid_consistency=ON
+log_replica_updates=ON
+read_only=ON
+super_read_only=ON
+sync_binlog=1
+innodb_flush_log_at_trx_commit=1
+binlog_expire_logs_seconds=604800
+bind_address=0.0.0.0
+require_secure_transport=ON
+# Provision host-specific TLS and verify the source certificate/hostname.
+# Never copy the local lab's unverified TLS policy to the shared PCs.
