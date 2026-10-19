@@ -1,0 +1,13 @@
+# Copy to /etc/rancher/k3s/config.yaml only after C verifies NIC/VLAN routes.
+node-name: telecom-pc1
+node-ip: 192.168.20.11
+advertise-address: 192.168.20.11
+flannel-iface: REPLACE_WITH_VLAN20_INTERFACE
+flannel-backend: vxlan
+cluster-cidr: 10.42.0.0/16
+service-cidr: 10.43.0.0/16
+disable: [traefik, servicelb]
+write-kubeconfig-mode: "0600"
+tls-san: [192.168.20.11, 192.168.50.11, manage1.telecom.test]
+kube-proxy-arg:
+  - nodeport-addresses=192.168.20.0/24

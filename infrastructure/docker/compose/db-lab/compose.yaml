@@ -1,0 +1,54 @@
+# Isolated synthetic-data lab. No ports are published to the host.
+name: telecom-b-db-lab-v1
+
+services:
+  mysql-primary:
+    image: telecom-mysql-primary:lab
+    build:
+      context: .
+      args: {REPLICATION_ROLE: primary}
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/root-password
+      MYSQL_DATABASE: telecom
+      MYSQL_USER: telecom_app
+      MYSQL_PASSWORD_FILE: /run/secrets/app-password
+    volumes:
+      - primary_data:/var/lib/mysql
+      - ../../../../.secrets/db-lab/primary-root:/run/secrets/root-password:ro
+      - ../../../../.secrets/db-lab/app-password:/run/secrets/app-password:ro
+    healthcheck: &health
+      test: [CMD, mysqladmin, ping, -h, 127.0.0.1, --silent]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 30s
+
+  mysql-replica:
+    image: telecom-mysql-replica:lab
+    build:
+      context: .
+      args: {REPLICATION_ROLE: replica}
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/root-password
+      # App database/account arrive through source replication; do not create twice.
+    volumes:
+      - replica_data:/var/lib/mysql
+      - ../../../../.secrets/db-lab/replica-root:/run/secrets/root-password:ro
+      - ../../../../.secrets/db-lab/app-password:/run/secrets/app-password:ro
+    healthcheck: *health
+
+  mysql-restore:
+    profiles: [restore]
+    image: mysql:8.4@sha256:24989179f58856db763f418010c1169fecc944e3ec1ea7e921572d83eb070f70
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/root-password
+      MYSQL_DATABASE: telecom_restore_test
+    volumes:
+      - restore_data:/var/lib/mysql
+      - ../../../../.secrets/db-lab/restore-root:/run/secrets/root-password:ro
+    healthcheck: *health
+
+volumes:
+  primary_data:
+  replica_data:
+  restore_data:

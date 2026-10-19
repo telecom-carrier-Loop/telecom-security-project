@@ -1,0 +1,9 @@
+[mysqld]
+server_id=1
+log_bin=mysql-bin
+gtid_mode=ON
+enforce_gtid_consistency=ON
+log_replica_updates=ON
+sync_binlog=1
+innodb_flush_log_at_trx_commit=1
+binlog_expire_logs_seconds=604800

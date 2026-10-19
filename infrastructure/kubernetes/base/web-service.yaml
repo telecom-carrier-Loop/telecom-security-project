@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: telecom-web
+  namespace: telecom
+spec:
+  type: NodePort
+  externalTrafficPolicy: Local
+  selector: {app: telecom-web}
+  ports:
+    - {name: http, port: 80, targetPort: http, nodePort: 30080}

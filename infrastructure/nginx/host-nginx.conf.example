@@ -1,0 +1,74 @@
+# Render __WAS_IP__ and __MGMT_IP__ for the selected physical host.
+user nginx;
+worker_processes auto;
+pid /tmp/nginx.pid;
+error_log /dev/stderr warn;
+events { worker_connections 1024; }
+
+http {
+    include /etc/nginx/mime.types;
+    log_format telecom_json escape=json
+        '{"timestamp":"$time_iso8601","request_id":"$request_id",'
+        '"method":"$request_method","path":"$uri","status":$status,'
+        '"upstream_status":"$upstream_status","duration":$request_time}';
+    access_log /dev/stdout telecom_json;
+
+    upstream telecom_web {
+        server 192.168.20.11:30080 max_fails=2 fail_timeout=5s;
+        server 192.168.20.12:30080 max_fails=2 fail_timeout=5s;
+    }
+    upstream telecom_api {
+        server 192.168.20.11:30500 max_fails=2 fail_timeout=5s;
+        server 192.168.20.12:30500 max_fails=2 fail_timeout=5s;
+    }
+    proxy_bind __WAS_IP__;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Request-ID $request_id;
+    proxy_connect_timeout 2s;
+    proxy_read_timeout 30s;
+    proxy_next_upstream error timeout;
+    # Do not add the non_idempotent retry option.
+    ssl_certificate /etc/nginx/tls/server.crt;
+    ssl_certificate_key /etc/nginx/tls/server.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    server {
+        listen 80 default_server;
+        server_name _;
+        return 308 https://portal.telecom.test$request_uri;
+    }
+    server {
+        listen 443 ssl default_server;
+        server_name portal.telecom.test;
+        location = /admin { return 404; }
+        location ^~ /admin/ { return 404; }
+        location = /api/admin { return 404; }
+        location ^~ /api/admin/ { return 404; }
+        location = /api/internal { return 404; }
+        location ^~ /api/internal/ { return 404; }
+        location /api/ { proxy_pass http://telecom_api; }
+        location / { proxy_pass http://telecom_web; }
+    }
+    server {
+        listen __MGMT_IP__:443 ssl;
+        server_name manage1.telecom.test manage2.telecom.test;
+        location = /api/internal { return 404; }
+        location ^~ /api/internal/ { return 404; }
+        location /api/ { proxy_pass http://telecom_api; }
+        location / { proxy_pass http://telecom_web; }
+    }
+    server {
+        listen 127.0.0.1:18080;
+        server_name localhost;
+        location = /edge-health { access_log off; return 200 'edge-ok\n'; }
+        location / { return 404; }
+    }
+    server {
+        listen 127.0.0.1:18081;
+        server_name localhost;
+        location = /api/internal/incident-events { proxy_pass http://telecom_api; }
+        location / { return 404; }
+    }
+}
