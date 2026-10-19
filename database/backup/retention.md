@@ -1,4 +1,4 @@
-# 백업 운영 — B
+# 백업 운영 — 인프라 담당
 
 공용 PC의 Linux 작업은 매일 02:00 KST에 `backup.sh`를 실행합니다. 서버 timezone과 cron/systemd timer의 timezone을 함께 기록합니다. 최근 일별 7개와 주별 4개를 서로 구분해 보관하고 두 PC와 분리된 매체에 사본을 둡니다.
 

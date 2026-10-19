@@ -6,7 +6,7 @@
 - tests/auth·support·membership·payments/: 기능별 공동 검증.
 - security/scenarios/: C의 승인된 웹·네트워크 시나리오.
 - integration/: 브라우저→API→DB 및 분야 간 연동.
-- load/: B의 한도 있는 부하·중단 조건.
+- load/: 인프라 담당자의 한도 있는 부하·중단 조건.
 - monitoring/: D의 합성 이벤트·수집·중복·실패·재처리.
 
 최초 목표는 최소 화면→Flask→MySQL→로그 1건입니다. 이후 교차 Pod 인증, 정책 허용/차단, 동일 이벤트 3회→티켓 1개, Discord 실패, 백업 복원과 장애 전환을 검증합니다.

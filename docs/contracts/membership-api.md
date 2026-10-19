@@ -1,4 +1,4 @@
-# 멤버십 — A / B / C
+# 멤버십 — A / 인프라 담당 / C
 
 예정 경로: GET /api/membership/me, /transactions, /benefits; POST /api/membership/benefits/{id}/redeem.
 

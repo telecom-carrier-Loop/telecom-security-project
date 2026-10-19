@@ -1,8 +1,8 @@
-# B 담당 개발·실습 시작 가이드
+# 인프라 담당 개발·실습 시작 가이드
 
 ## 현재 완료 범위
 
-B는 Docker·Compose·k3s·호스트 Nginx·웹 Keepalived·MySQL 복제·백업·복원을 담당합니다. A의 앱 코드, C의 방화벽·NetworkPolicy, D의 관제 구성은 해당 담당자가 작성합니다.
+인프라 담당자는 Docker·Compose·k3s·호스트 Nginx·웹 Keepalived·MySQL 복제·백업·복원을 담당합니다. A의 앱 코드, C의 방화벽·NetworkPolicy, D의 관제 구성은 해당 담당자가 작성합니다.
 
 | 항목 | 준비 상태 | 다음 조건 |
 |---|---|---|
@@ -16,7 +16,7 @@ B는 Docker·Compose·k3s·호스트 Nginx·웹 Keepalived·MySQL 복제·백업
 
 ## 오늘 직접 할 일 3가지
 
-1. 아래 MySQL 실습 명령을 실행하고 `PASS`를 확인합니다. 이미 이 PC에서 자동 검증한 결과는 [검증 기록](b-verification.md)에 있습니다.
+1. 아래 MySQL 실습 명령을 실행하고 `PASS`를 확인합니다. 이미 이 PC에서 자동 검증한 결과는 [검증 기록](infra-verification.md)에 있습니다.
 2. PC1·PC2의 OS·CPU·RAM·디스크·유선 LAN 포트 수를 확인합니다. Windows면 작업 관리자 → 성능과 설정 → 시스템 → 정보를 확인합니다. Ubuntu면 아래 인벤토리 명령을 실행합니다.
 3. LAN 케이블이 꽂히는 스위치의 제조사·모델명을 확인합니다. 장비가 없다면 미보유로 기록합니다. 구매는 모델과 구성 확인 후 결정합니다.
 
@@ -34,7 +34,7 @@ git status
 git branch --show-current
 ```
 
-B 기반 작업 브랜치는 `codex/b-infrastructure-foundation`입니다. PR을 검토해 `develop`에 통합한 뒤 후속 작업은 최신 `develop`에서 새 `codex/b-작업명` 브랜치로 시작합니다. 다른 사람의 미커밋 변경이 있으면 브랜치를 바꾸기 전에 보존합니다.
+인프라 기반 작업 브랜치는 `infra/foundation`입니다. 기존 인프라 PR은 `develop`에 병합되었으며 사용자의 요청에 따라 `main`에도 반영합니다. 후속 작업은 최신 `develop`에서 새 `infra/작업명` 브랜치로 시작합니다. 다른 사람의 미커밋 변경이 있으면 브랜치를 바꾸기 전에 보존합니다.
 
 ## 2. Docker 확인과 복제 실습
 
@@ -109,10 +109,10 @@ bash infrastructure/tools/collect-host-inventory.sh
 
 CPU·RAM·디스크·유선 포트 수·OS를 PC별로 정리합니다. 가상 인터페이스 수를 물리 NIC 수로 세지 않습니다. 실제 IP·장비 식별정보·로그는 공개 저장소에 원본 그대로 올리지 않습니다. 가상 NIC와 VLAN 서브인터페이스 배치는 C와 합의합니다.
 
-장비 확인 후 B/C 작업 순서:
+장비 확인 후 인프라 담당/C 작업 순서:
 
 1. C가 주소·VLAN 트렁크·허용 포트·pfSense VM 위치를 확인합니다.
-2. B가 공용 PC용 MySQL 실행 구성, 데이터 경로·볼륨 소유권·서버 ID·검증 TLS·계정을 확정합니다. 현재 실습 Compose를 공용 PC 운영 설정으로 사용하지 않습니다.
+2. 인프라 담당자가 공용 PC용 MySQL 실행 구성, 데이터 경로·볼륨 소유권·서버 ID·검증 TLS·계정을 확정합니다. 현재 실습 Compose를 공용 PC 운영 설정으로 사용하지 않습니다.
 3. PC1 k3s Server+Worker, PC2 Agent 설치 버전과 옵션을 검증합니다. 토큰·kubeconfig는 서버에서 보호하며 Git에 넣지 않습니다.
 4. A 이미지를 실제 SHA/digest로 빌드하고 양쪽 노드에서 접근 가능하게 발행합니다. Migration Secret과 런타임 Secret을 분리합니다.
 5. Migration 1회 실행 후 Web/API를 배포합니다. C의 NetworkPolicy가 필요한 통신을 허용하는지 공동 확인합니다.
@@ -131,7 +131,7 @@ kubectl kustomize infrastructure/kubernetes/base
 
 ## 5. 다른 담당자에게 전달할 내용
 
-복사할 인계 문구와 필요한 파일은 [담당자 연동 계약](b-runtime-handoff.md)에 정리했습니다. 메시지 전송은 팀에서 직접 진행합니다.
+복사할 인계 문구와 필요한 파일은 [담당자 연동 계약](infra-runtime-handoff.md)에 정리했습니다. 메시지 전송은 팀에서 직접 진행합니다.
 
 ## 6. 내가 직접 수정한 뒤 커밋하는 방법
 

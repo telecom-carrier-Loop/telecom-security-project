@@ -1,4 +1,4 @@
-# B 기반 검증 기록
+# 인프라 기반 검증 기록
 
 검증일: 2026-10-19 / Windows 개인 개발 PC / Docker Desktop 4.49.0, Engine 28.5.1, Compose 2.40.3-desktop.1. 공용 PC를 대상으로 실행하지 않았습니다.
 

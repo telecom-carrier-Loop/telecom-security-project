@@ -1,7 +1,7 @@
 ---
 name: 개발·설정 작업
 about: 담당 범위와 선행 계약을 명시하는 작업
-title: "[A/B/C/D] 작업 제목"
+title: "[A/인프라 담당/C/D] 작업 제목"
 labels: ""
 assignees: ""
 ---

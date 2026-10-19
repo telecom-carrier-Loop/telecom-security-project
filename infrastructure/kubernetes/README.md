@@ -1,4 +1,4 @@
-# Kubernetes 준비 상태 — B
+# Kubernetes 준비 상태 — 인프라 담당
 
 base/는 오프라인 렌더링 가능한 설계 템플릿입니다. 아직 적용하지 않습니다. 이미지 태그에 REPLACE_WITH_COMMIT_SHA가 남아 있고 실제 앱·Secret·노드가 필요합니다.
 
@@ -15,4 +15,4 @@ kubectl kustomize infrastructure/kubernetes/base
 5. C의 필수 허용/차단 정책과 양 노드의 실제 source/NAT 경로 확인.
 6. 앱 배포·각 노드 하나씩 배치·교차 인증·NodePort·Nginx·DB 검증.
 
-NetworkPolicy는 C 소유이므로 이번 B 변경에 작성하지 않습니다. 단일 제어부 장애 시험은 공용 PC가 준비된 뒤 전체 팀과 진행합니다.
+NetworkPolicy는 C 소유이므로 이번 인프라 담당 변경에 작성하지 않습니다. 단일 제어부 장애 시험은 공용 PC가 준비된 뒤 전체 팀과 진행합니다.

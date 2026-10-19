@@ -1,4 +1,4 @@
-# 통신 경로 — C / B / D
+# 통신 경로 — C / 인프라 담당 / D
 
 고객 → pfSense NAT → 웹 VIP 192.168.10.100 → 호스트 Nginx → VLAN20 NodePort 30080/30500 → Web/API → DB VIP 192.168.30.100:3306.
 

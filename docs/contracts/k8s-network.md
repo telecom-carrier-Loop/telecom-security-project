@@ -1,4 +1,4 @@
-# k3s·네트워크 — B / C
+# k3s·네트워크 — 인프라 담당 / C
 
 PC1 Server+Worker, PC2 Agent. namespace=telecom, app=telecom-web / telecom-api. Pod CIDR=10.42.0.0/16, Service CIDR=10.43.0.0/16, node-ip=각 VLAN20 주소.
 

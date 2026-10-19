@@ -1,4 +1,4 @@
-# 호스트 Nginx·웹 VIP 준비 — B / C
+# 호스트 Nginx·웹 VIP 준비 — 인프라 담당 / C
 
 `host-nginx.conf.example`은 공용 PC별 NIC/IP·TLS·방화벽을 확인한 후 사용할 전체 Nginx 설정입니다. 현재 시스템 설정에 설치하지 않습니다.
 

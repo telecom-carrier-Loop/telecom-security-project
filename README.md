@@ -4,9 +4,9 @@ React·Flask·MySQL 고객 포털에 네트워크 접근 통제, 보안 관제, 
 
 ## 현재 상태
 
-기본 디렉터리와 개발 계약, B의 Docker·로컬 Compose·MySQL 복제 실습·백업 및 k3s/Nginx/Keepalived 템플릿을 준비했습니다. A 앱 코드와 의존성·잠금 파일은 아직 없으며 실제 공용 PC에는 적용하지 않았습니다. 격리된 DB 실습은 실행할 수 있지만 앱 전체 서비스는 아직 실행할 수 없습니다.
+기본 디렉터리와 개발 계약, 인프라 담당자의 Docker·로컬 Compose·MySQL 복제 실습·백업 및 k3s/Nginx/Keepalived 템플릿을 준비했습니다. A 앱 코드와 의존성·잠금 파일은 아직 없으며 실제 공용 PC에는 적용하지 않았습니다. 격리된 DB 실습은 실행할 수 있지만 앱 전체 서비스는 아직 실행할 수 없습니다.
 
-B 담당자는 [개발·실습 시작 가이드](docs/operations/b-start-here.md)와 [검증 기록](docs/operations/b-verification.md)부터 확인합니다.
+인프라 담당자는 [개발·실습 시작 가이드](docs/operations/infra-start-here.md)와 [검증 기록](docs/operations/infra-verification.md)부터 확인합니다.
 
 ## 먼저 읽기
 
@@ -22,8 +22,8 @@ B 담당자는 [개발·실습 시작 가이드](docs/operations/b-start-here.md
 | 경로 | 내용 | 주 담당 |
 |---|---|---|
 | `frontend/`, `backend/` | React·Flask·인증·API | A, 문의 C·인시던트 D 공동 |
-| `database/` | 스키마·Migration·Seed / 복제·백업·복구 | A / B |
-| `infrastructure/` | Docker·k3s·Nginx·Keepalived | B, NetworkPolicy는 C |
+| `database/` | 스키마·Migration·Seed / 복제·백업·복구 | A / 인프라 담당 |
+| `infrastructure/` | Docker·k3s·Nginx·Keepalived | 인프라 담당, NetworkPolicy는 C |
 | `network/` | 주소·장비·포트·통신 경로 | C |
 | `security/` | pfSense·VPN·Suricata / Wazuh | C / D |
 | `monitoring/` | Graylog·Zabbix·n8n·Discord·event-relay | D |
@@ -34,7 +34,7 @@ B 담당자는 [개발·실습 시작 가이드](docs/operations/b-start-here.md
 ## 시작 순서
 
 - A: 최소 React·Flask와 Health API, DB 모델·단일 Migration 준비.
-- B: 격리된 DB 복제·복원 실습, 장비 확인, A 앱 통합 후 이미지 빌드와 공용 PC 검증.
+- 인프라 담당: 격리된 DB 복제·복원 실습, 장비 확인, A 앱 통합 후 이미지 빌드와 공용 PC 검증.
 - C: 장비 조건·주소·허용/차단 통신표 작성.
 - D: 표준 이벤트·샘플과 Mock API 기반 자동화 준비.
 - 최소 연동: 화면 → API → DB → 공유 로그인 → 이벤트 → 티켓 → 알림.

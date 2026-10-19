@@ -1,10 +1,10 @@
-# MySQL 수동 전환 — B 주관, A·C·D 공동
+# MySQL 수동 전환 — 인프라 담당 주관, A·C·D 공동
 
 실장비에서 바로 실행하는 자동 스크립트가 아닙니다. 장비·권한·복제 상태를 확인하고 승인된 점검 시간에 수행합니다.
 
 1. A가 결제·문의·포인트 쓰기를 중단하고 D가 장애 시작 시각을 기록합니다.
-2. C와 B가 구 Primary를 전원/네트워크/쓰기 권한으로 격리했음을 증명합니다. 응답 없음만으로 꺼졌다고 판단하지 않습니다. 확인 불가 시 승격하지 않습니다.
-3. B가 `SHOW REPLICA STATUS\G`, IO/SQL 오류, executed/retrieved GTID, 남은 relay log를 확인합니다. 계획 전환은 쓰기 중단 후 GTID 적용을 대기하고 돌발 장애는 손실 가능성을 A와 판단합니다.
+2. C와 인프라 담당자가 구 Primary를 전원/네트워크/쓰기 권한으로 격리했음을 증명합니다. 응답 없음만으로 꺼졌다고 판단하지 않습니다. 확인 불가 시 승격하지 않습니다.
+3. 인프라 담당자가 `SHOW REPLICA STATUS\G`, IO/SQL 오류, executed/retrieved GTID, 남은 relay log를 확인합니다. 계획 전환은 쓰기 중단 후 GTID 적용을 대기하고 돌발 장애는 손실 가능성을 A와 판단합니다.
 4. 복제 반영이 끝난 상태에서 `STOP REPLICA` 후 Replica의 read_only/super_read_only를 해제합니다. 자동 승격·RESET MASTER·무조건 RESET REPLICA ALL은 사용하지 않습니다.
 5. 구 Primary에 DB VIP가 남지 않았는지 확인한 다음 PC2 VLAN30 인터페이스에 192.168.30.100/24를 수동 할당합니다. gratuitous ARP 후 접근을 확인합니다. 실제 NIC 명령은 장비 실사표에 맞춰 별도로 기록합니다.
 6. 앱은 같은 DB VIP로 연결 풀을 회복합니다. 제어부 중단 시 kubectl 설정 변경에 의존하지 않습니다. PC2 Pod가 없거나 중단됐다면 제어부 복구부터 진행합니다.

@@ -1,4 +1,4 @@
-# 모의 결제 — A / B / C
+# 모의 결제 — A / 인프라 담당 / C
 
 예정 경로: GET /api/invoices/me, POST /api/payments, GET /api/payments/{id}, POST /api/admin/payments/{id}/refund.
 

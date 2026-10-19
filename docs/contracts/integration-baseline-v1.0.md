@@ -1,6 +1,6 @@
 # 보안 프로젝트 — 4인 통합 개발 확정 기준 v1.0
 
-작성일: 2026-10-18 / 목적: A·B·C·D의 개발 결과물을 동일 기준으로 통합한다.
+작성일: 2026-10-18 / 목적: A·인프라 담당·C·D의 개발 결과물을 동일 기준으로 통합한다.
 
 이 문서는 사용자의 요청에 따라 결정한 새 개발 기준이다. 팀에 공유한 뒤 공통 기준으로 적용하며, 실제 저장소·장비에 이미 반영됐다는 의미는 아니다. 기존 8개 가이드에서 서로 다른 예시를 제시한 항목은 이 문서의 값으로 통일한다. 이후 변경은 변경 이유·영향 파일·검증 결과를 연결된 Issue/PR에 남긴다.
 
@@ -8,12 +8,12 @@
 
 | 담당 | 최종 책임 | 공동 개발·검증 |
 |---|---|---|
-| A | React·Flask, 인증·권한, DB 모델·Migration, API 계약 | C와 문의, B와 결제·포인트 동시성, D와 인시던트 |
-| B | Docker·Compose, 이미지, k3s, Nginx·웹 VIP, MySQL 복제·백업·수동 전환 | A 실행 규격, C 네트워크, D 자원·장애 지표 |
-| C | VLAN·IP·pfSense·VPN, Suricata, NetworkPolicy·보안 검증 | B 실제 경로, A 접근 권한, D 센서 이벤트 |
-| D | Wazuh·Graylog·Zabbix, 이벤트 표준, n8n·Discord·재처리 | A 인시던트 API, B 운영 자원, C 탐지 로그 |
+| A | React·Flask, 인증·권한, DB 모델·Migration, API 계약 | C와 문의, 인프라 담당자와 결제·포인트 동시성, D와 인시던트 |
+| 인프라 담당 | Docker·Compose, 이미지, k3s, Nginx·웹 VIP, MySQL 복제·백업·수동 전환 | A 실행 규격, C 네트워크, D 자원·장애 지표 |
+| C | VLAN·IP·pfSense·VPN, Suricata, NetworkPolicy·보안 검증 | 인프라 담당 실제 경로, A 접근 권한, D 센서 이벤트 |
+| D | Wazuh·Graylog·Zabbix, 이벤트 표준, n8n·Discord·재처리 | A 인시던트 API, 인프라 담당 운영 자원, C 탐지 로그 |
 
-공통 라우터·인증 모듈·앱 초기화·ORM 모델 등록·패키지 및 잠금 파일은 A가 통합한다. B가 앱 폴더에 추가하는 파일은 빌드용 `.dockerignore`로 한정한다. C/D는 담당 기능 모듈을 작성하고 공통 파일 변경 요구를 연결 PR로 A에게 전달한다. 같은 기능 파일의 동시 수정은 Issue에서 범위를 나눈 후 진행한다.
+공통 라우터·인증 모듈·앱 초기화·ORM 모델 등록·패키지 및 잠금 파일은 A가 통합한다. 인프라 담당자가 앱 폴더에 추가하는 파일은 빌드용 `.dockerignore`로 한정한다. C/D는 담당 기능 모듈을 작성하고 공통 파일 변경 요구를 연결 PR로 A에게 전달한다. 같은 기능 파일의 동시 수정은 Issue에서 범위를 나눈 후 진행한다.
 
 ## 2. 구현 구조
 
@@ -21,7 +21,7 @@
 - 백엔드: Python 3.12 + Flask Application Factory + SQLAlchemy. WSGI는 `backend/wsgi.py`의 `app`, 실행 포트는 5000이다.
 - DB: MySQL 8.4 계열, InnoDB, utf8mb4. 앱 데이터와 보안 인시던트는 같은 `telecom` DB의 별도 테이블로 관리한다.
 - 기반 OS: Ubuntu Server 24.04 LTS. 프론트 빌드 Node.js는 22 계열로 통일한다.
-- 런타임의 정확한 패치·이미지 digest는 B가 최초 호환성 검증 후 `docs/contracts/versions.md`에 고정한다. A의 lock 파일과 함께 커밋하며, 버전 기록 없는 이미지는 통합하지 않는다. `latest`와 PC별 임의 업그레이드는 사용하지 않는다.
+- 런타임의 정확한 패치·이미지 digest는 인프라 담당자가 최초 호환성 검증 후 `docs/contracts/versions.md`에 고정한다. A의 lock 파일과 함께 커밋하며, 버전 기록 없는 이미지는 통합하지 않는다. `latest`와 PC별 임의 업그레이드는 사용하지 않는다.
 - 개인 개발 통합은 Compose, 공용 PC의 웹/API는 k3s로 실행한다. 공용 PC에 같은 앱을 Compose와 k3s로 이중 기동하지 않는다.
 - 로그인까지 시험하는 로컬 Compose는 HTTPS `127.0.0.1:8443`을 사용한다. 로컬 hosts에서 `portal.telecom.test`를 127.0.0.1로 매핑하고 실습 CA를 신뢰한다. HTTP 8080은 HTTPS 8443으로 이동시킨다. 초기 HTTP Health 확인만으로 Secure 쿠키 인증을 검증했다고 판단하지 않는다.
 - MySQL과 관제 도구는 호스트 또는 전용 Compose로 실행하고, 볼륨을 영속화한다. 관제·DB를 웹 Deployment의 replica 수로 복제하지 않는다.
@@ -42,7 +42,7 @@
 | 이벤트 표준 | `docs/contracts/observability/event-schema.md` |
 | k3s 통신·라벨 | `docs/contracts/k8s-network.md` |
 
-`backend/migrations/`와 앱 폴더 안 Dockerfile은 별도 정본으로 만들지 않는다. Flask-Migrate의 Migration 디렉터리는 `database/migrations/`로 명시한다. API 컨테이너 일반 빌드 컨텍스트는 `backend/`이고 Migration은 저장소 루트에서 별도 작업으로 실행한다. 공용 PC Migration은 B가 루트 컨텍스트로 제작한 일회성 전용 이미지에서 수행하여 API 이미지에 없는 외부 경로를 참조하지 않게 한다.
+`backend/migrations/`와 앱 폴더 안 Dockerfile은 별도 정본으로 만들지 않는다. Flask-Migrate의 Migration 디렉터리는 `database/migrations/`로 명시한다. API 컨테이너 일반 빌드 컨텍스트는 `backend/`이고 Migration은 저장소 루트에서 별도 작업으로 실행한다. 공용 PC Migration은 인프라 담당자가 루트 컨텍스트로 제작한 일회성 전용 이미지에서 수행하여 API 이미지에 없는 외부 경로를 참조하지 않게 한다.
 
 ## 4. 주소와 네트워크
 
@@ -136,7 +136,7 @@ NodePort `30050`은 폐기하고 `30500`으로 통일한다. NodePort는 승인�
 - 고객 문의는 `support_tickets`/`support_replies`, 보안 사고는 `security_incidents`/`incident_histories`로 분리한다.
 - 사고 상태는 `OPEN → INVESTIGATING → RESOLVED → CLOSED`다. `RESOLVED → INVESTIGATING` 재개를 허용하고 변경 이력을 남긴다. 별도 `RESPONDING` 상태를 추가하지 않는다.
 - 문의 상태는 `OPEN`, `IN_PROGRESS`, `ANSWERED`, `CLOSED`다.
-- Migration 파일·순서는 A가 관리한다. 앱 시작 명령에서 자동 실행하지 않는다. B가 배포 전 단일 일회성 작업으로 Primary에 실행하고, 복제 적용과 버전을 확인한 후 앱을 배포한다.
+- Migration 파일·순서는 A가 관리한다. 앱 시작 명령에서 자동 실행하지 않는다. 인프라 담당자가 배포 전 단일 일회성 작업으로 Primary에 실행하고, 복제 적용과 버전을 확인한 후 앱을 배포한다.
 - 앱 계정에는 DDL·복제·승격 권한을 주지 않는다. 앱·Migration·복제·백업·관제 계정을 분리한다.
 - 결제·포인트는 서버의 원본 금액·혜택 비용을 기준으로 처리한다. 행 잠금 또는 원자적 조건 갱신과 DB 제약을 사용한다.
 - 결제와 혜택 사용 요청에는 `Idempotency-Key`를 사용한다. 사용자+작업+키를 고유하게 저장하고 요청 본문 해시도 비교한다. 같은 내용 재요청은 기존 결과, 같은 키에 다른 내용은 409다.
@@ -170,12 +170,12 @@ NodePort `30050`은 폐기하고 `30500`으로 통일한다. NodePort는 승인�
 ## 11. MySQL 수동 전환과 백업
 
 - 앱 설정은 `DB_HOST=192.168.30.100`, `DB_PORT=3306`, `DB_NAME=telecom`이다. `db-primary`는 문서상의 역할 이름으로만 사용하고 DNS 전환에 의존하지 않는다.
-- 웹 VIP `.10.100`은 자동, DB VIP `.30.100`은 B가 수동으로 이동한다. DB VIP에 Keepalived 자동 승격을 연결하지 않는다.
+- 웹 VIP `.10.100`은 자동, DB VIP `.30.100`은 인프라 담당자가 수동으로 이동한다. DB VIP에 Keepalived 자동 승격을 연결하지 않는다.
 - 정상 상태는 PC1 Primary+DB VIP, PC2 Replica이며 Replica는 `read_only`와 `super_read_only`다. GTID 기반 비동기 복제를 사용한다.
 - 수동 전환 순서는 쓰기 중단 → 구 Primary 쓰기 차단/격리 확인 → 복제 상태·데이터 손실 평가 → Replica 승격 → DB VIP 이동·ARP 갱신 → 앱 연결 회복 → 거래 검증이다. 구 Primary 격리를 증명하지 못하면 승격하지 않는다.
 - DB 수신 설정은 VIP 소유 상태와 함께 동작하도록 구성하고, 호스트 방화벽에서 VLAN30의 명시한 출발지·포트만 허용한다. VIP가 없는 Replica가 수신 주소 바인딩 오류로 시작하지 못하는 구성을 사용하지 않는다.
 - 앱은 DB 풀의 죽은 연결을 제거하고 재연결한다. 커밋 결과가 불명확한 결제·포인트·티켓 쓰기는 같은 멱등 키로 확인하며 자동 재실행으로 중복 처리하지 않는다.
-- PC1 제어부가 중단돼도 B는 VLAN50 SSH/콘솔로 DB VIP를 이동한다. DB 주소 변경을 위한 Kubernetes 재배포는 필요하지 않다. 기존 Pod가 없거나 동작하지 않으면 제어부 복구를 먼저 수행한다.
+- PC1 제어부가 중단돼도 인프라 담당자는 VLAN50 SSH/콘솔로 DB VIP를 이동한다. DB 주소 변경을 위한 Kubernetes 재배포는 필요하지 않다. 기존 Pod가 없거나 동작하지 않으면 제어부 복구를 먼저 수행한다.
 - PC1 복귀 시 쓰기를 막고 새 Primary를 기준으로 Replica로 재구성한다. 원래 Primary로 자동 복귀시키지 않는다.
 - DB 백업은 매일 02:00 KST, 최근 일별 7개+주별 4개를 암호화 보관한다. 두 PC와 분리된 매체에 사본을 둔다. 저장 공간 부족 시 조용히 삭제하지 않고 경고한다.
 - 매주 및 시연 전 별도 DB로 복원하고 거래·제약·건수를 확인한다. 앱 DB 외 관제 설정·n8n 데이터 및 암호화 키·k3s 복구 자료도 보호된 별도 백업에 포함한다.
@@ -228,7 +228,7 @@ NodePort `30050`은 폐기하고 `30500`으로 통일한다. NodePort는 승인�
 ## 14. 관제·자원·공개 저장소
 
 - PC1에는 Graylog+MongoDB+호환 검색 백엔드, PC2에는 Wazuh 전체+Zabbix+전용 DB+n8n+이벤트 수신 서비스를 배치한다. 양 호스트에 Wazuh/Zabbix Agent를 둔다.
-- Zabbix DB는 앱의 복제 DB와 별도 인스턴스다. Wazuh Indexer와 Graylog 검색 백엔드도 공유하지 않는다. 관제 이미지의 호환 조합은 D가 검증하고 B의 버전 잠금 문서에 함께 기록한다.
+- Zabbix DB는 앱의 복제 DB와 별도 인스턴스다. Wazuh Indexer와 Graylog 검색 백엔드도 공유하지 않는다. 관제 이미지의 호환 조합은 D가 검증하고 인프라 담당자의 버전 잠금 문서에 함께 기록한다.
 - PC1에서 PC2의 관제 진입점을 확인하는 경량 외부 점검을 실행하고 PC1 로컬에 기록한다. PC2 장애 때 PC2 n8n을 경유한 알림을 기대하지 않는다. 외부 점검기는 별도 보호 자격증명으로 운영 알림만 전송한다.
 - 공용 PC의 전체 구성 검증 기준은 각 RAM 32GB 이상·SSD·8개 논리 CPU 이상이며, 이는 용량 계획의 출발점이다. 실제 메모리·IO·로그 증가량을 측정한다. 부족하면 서비스 동시 구동을 중단하고 축소 검증 상태로 표시한다.
 - 최초 통합은 한 도구씩 기동하고 로그 보존은 기본 7일로 시작한다. RAM 85%가 5분 지속되거나 여유 디스크 20% 미만이면 부하 시험을 중단한다.
@@ -236,17 +236,17 @@ NodePort `30050`은 폐기하고 `30500`으로 통일한다. NodePort는 승인�
 
 ## 15. GitHub와 공동 통합 순서
 
-- main은 안정 버전, develop은 통합 브랜치다. 이번 Codex 작업 브랜치는 `codex/a-*`, `codex/b-*`, `codex/c-*`, `codex/d-*`로 통일한다. 기존 작업 브랜치는 강제로 이름을 바꾸지 않는다.
+- main은 안정 버전, develop은 통합 브랜치다. 작업 브랜치는 목적별 `feature/*`, `infra/*`, `security/*`, `monitor/*`, `fix/*`, `test/*`, `docs/*`를 사용하며 별도 도구명 접두사는 붙이지 않는다. 인프라 작업은 `infra/*`를 사용한다.
 - 커밋은 사용자 계정, 한글 `<type>(<scope>) : <요약>` 형식이며 feat/fix/build/chore/ci/docs/style/refactor/test/perf 타입을 사용한다. 예: `fix(network) : API NodePort를 30500으로 통일`.
 - 한 기능 또는 독립 변경씩 커밋·PR을 나눈다. main/develop 직접 push를 사용하지 않는다. 로컬 검증 후 작업 브랜치를 push하고 영향 담당자가 검토한 PR을 develop에 통합한다. CODEOWNERS는 추가하지 않는다.
 - API·환경변수·포트·라벨·로그 필드 변경은 코드+계약+샘플+관련 테스트를 같은 PR 또는 연결 PR로 갱신한다.
 
 통합 순서:
 
-1. A 최소 React/Flask·live/ready → B 이미지·Compose → DB 읽기/쓰기·재기동 후 보존.
+1. A 최소 React/Flask·live/ready → 인프라 담당 이미지·Compose → DB 읽기/쓰기·재기동 후 보존.
 2. A 공유 세션·역할·소유권 → C 고객 간 차단 → 두 API 실행본 교차 인증.
 3. D 표준 이벤트 → 수신 저장 → Mock API → n8n → 실제 인시던트 API·관리자 화면.
-4. B k3s·라벨·노드 분산 → C 허용/차단 정책·DNS·DB·관리 접근.
+4. 인프라 담당 k3s·라벨·노드 분산 → C 허용/차단 정책·DNS·DB·관리 접근.
 5. 결제·포인트 동시성, 이벤트 중복·timeout, Discord 실패, 프로세스 재시작 후 재처리.
 6. 웹 VIP·DB 복제·별도 복원·수동 승격·PC1/PC2 전체 장애·제한 부하를 각각 시험.
 

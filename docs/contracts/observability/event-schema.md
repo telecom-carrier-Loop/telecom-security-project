@@ -1,4 +1,4 @@
-# 표준 이벤트 — D / A·B·C
+# 표준 이벤트 — D / A·인프라 담당·C
 
 필수: schema_version, source, event_id, event_type, detected_at, severity, title, asset. 시간은 UTC ISO8601, severity는 info/low/medium/high/critical입니다. received_at은 수신기가 추가하고 request_id/scenario_id/evidence는 해당 시 사용합니다.
 
