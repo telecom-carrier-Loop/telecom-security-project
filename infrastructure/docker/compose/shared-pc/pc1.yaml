@@ -6,6 +6,7 @@ services:
       args: {REPLICATION_ROLE: primary}
     environment:
       MYSQL_ROOT_PASSWORD_FILE: /run/secrets/root-password
+      MYSQL_ROOT_HOST: localhost
       MYSQL_DATABASE: telecom
     ports:
       - "${PRIMARY_IP:?Set PRIMARY_IP in .env.shared-pc}:${PRIMARY_PORT:-3306}:3306"

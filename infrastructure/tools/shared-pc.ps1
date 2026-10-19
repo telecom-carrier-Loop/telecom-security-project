@@ -266,6 +266,9 @@ try {
             Invoke-Compose -CommandArgs @('config', '--quiet') | Out-Null
             Invoke-Compose -CommandArgs @('up', '--build', '-d', '--wait', '--wait-timeout', '180') | Out-Null
             Wait-Database
+            if ((Invoke-Db "SELECT COUNT(*) FROM mysql.user WHERE User='root' AND Host<>'localhost';") -ne '0') {
+                throw 'Remote root account exists in the retained volume; inspect its provisioning before continuing. No accounts removed.'
+            }
             if ($Role -eq 'pc2') {
                 $channels = Invoke-Db 'SELECT COUNT(*) FROM performance_schema.replication_connection_configuration;'
                 if ($channels -eq '0') {

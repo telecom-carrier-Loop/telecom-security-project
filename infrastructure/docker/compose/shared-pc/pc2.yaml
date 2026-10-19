@@ -6,6 +6,7 @@ services:
       args: {REPLICATION_ROLE: replica}
     environment:
       MYSQL_ROOT_PASSWORD_FILE: /run/secrets/root-password
+      MYSQL_ROOT_HOST: localhost
       # App schema and accounts must arrive through replication, not a second init.
     extra_hosts:
       - "mysql-primary.telecom.test:${PRIMARY_IP:?Set PRIMARY_IP in .env.shared-pc}"

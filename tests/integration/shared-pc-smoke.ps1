@@ -83,7 +83,7 @@ try {
     # Do not call connect-replica: prove the existing channel resumes by itself.
     & $controller -Action verify @replica -ProbeId $probeId
     & $controller -Action status @replica
-    Write-Output 'PASS: clean bootstrap, repeated connect, GTID probe, TLS negative checks, read-only rejection, automatic replica restart recovery.'
+    Write-Output 'PASS: localhost-only root on both nodes, clean bootstrap, repeated connect, GTID probe, TLS negative checks, read-only rejection, automatic replica restart recovery.'
 } finally {
     # Only this invocation's uniquely named projects; never delete volumes.
     $env:SHARED_SECRET_ROOT = $secretDirectory.Replace('\','/')

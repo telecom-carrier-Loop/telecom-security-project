@@ -33,6 +33,7 @@
 | 검사 | 결과 | 범위 |
 |---|---|---|
 | 독립 Compose 초기화 | PASS | 별도 프로젝트 2개·새 볼륨·각 root 비밀번호·CA/서버/클라이언트 인증서 생성 |
+| 원격 root 미생성 | PASS | MYSQL_ROOT_HOST=localhost 명시, 양쪽 mysql.user에서 localhost 이외 root 0개 확인 |
 | 검증 TLS GTID 복제 | PASS | receiver/applier ON, 오류 번호 0, AUTO_POSITION=1, SSL_ALLOWED/SSL_VERIFY_SERVER_CERTIFICATE=YES |
 | 합성 행 복제·쓰기 거절 | PASS | UUID 행 일치, Replica read_only/super_read_only=1, root INSERT ERROR 1290 |
 | 클라이언트 인증서 누락 | PASS | 올바른 복제 비밀번호만으로 연결 시 ERROR 1045 거절 |
