@@ -1,0 +1,36 @@
+name: telecom-pc2
+services:
+  mysql:
+    build:
+      context: .
+      args: {REPLICATION_ROLE: replica}
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/root-password
+      MYSQL_ROOT_HOST: localhost
+      # App schema and accounts must arrive through replication, not a second init.
+    extra_hosts:
+      - "mysql-primary.telecom.test:${PRIMARY_IP:?Set PRIMARY_IP in .env.shared-pc}"
+    # Replica has no host-published DB port in this initial milestone.
+    volumes:
+      - data:/var/lib/mysql
+      - type: bind
+        source: ${SHARED_SECRET_ROOT:-../../../../.secrets/shared-pc}/pc2/root-password
+        target: /run/secrets/root-password
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${SHARED_SECRET_ROOT:-../../../../.secrets/shared-pc}/pc2/tls
+        target: /run/secrets/tls
+        read_only: true
+        bind: {create_host_path: false}
+    tmpfs: [/run/mysql-tls:mode=0755]
+    mem_limit: 2g
+    healthcheck:
+      test: [CMD, mysqladmin, ping, -h, 127.0.0.1, --silent]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 45s
+    restart: unless-stopped
+volumes:
+  data:

@@ -1,5 +1,7 @@
 # 인프라 담당 개발·실습 시작 가이드
 
+현재 공용 PC는 Windows 11 + Docker Desktop이며 두 PC의 hello-world 성공과 학원망 주소가 확인되었습니다. **[공용 PC 두 대의 실행 가이드](shared-pc-docker.md)를 먼저 사용합니다.** 아래 Ubuntu·k3s·웹 VIP 설명은 원래 설계의 후속 단계이며 별도 Ubuntu VM 설치를 먼저 진행하지 않습니다. 웹·API 초안도 최신 main에 추가되어 과거의 앱 파일 미구현 설명은 최초 기반 작성 당시의 상태입니다.
+
 ## 현재 완료 범위
 
 인프라 담당자는 Docker·Compose·k3s·호스트 Nginx·웹 Keepalived·MySQL 복제·백업·복원을 담당합니다. A의 앱 코드, C의 방화벽·NetworkPolicy, D의 관제 구성은 해당 담당자가 작성합니다.
@@ -7,8 +9,8 @@
 | 항목 | 준비 상태 | 다음 조건 |
 |---|---|---|
 | Docker Desktop | 오류 복구 후 Engine 응답 확인 | 아래 실습부터 시작 |
-| 로컬 TLS·Compose·앱 Dockerfile | 작성, 프록시는 임시 테스트 서버로 검증 | A 앱 코드가 들어오면 실제 이미지 빌드 |
-| MySQL GTID 복제·읽기 전용 Replica | 격리된 새 Docker 프로젝트에서 검증 | 공용 PC 전용 실행 구성·계정·TLS는 장비 확인 후 작성 |
+| 로컬 TLS·Compose·앱 Dockerfile | 작성, 프록시는 임시 테스트 서버로 검증 | main의 앱 초안으로 실제 이미지 빌드·연동 검증 |
+| MySQL GTID 복제·읽기 전용 Replica | 격리 실습 및 두 PC용 Compose 작성·로컬 통합 시험 | 실제 학원망 두 PC에서 연결·방화벽 검증 |
 | 별도 DB 복원 | 합성 데이터로 검증 | 운영용 GPG 암호화·외부 매체 복구 시험 별도 |
 | k3s·Nginx·Keepalived | 템플릿 작성 | Ubuntu·NIC·VLAN·인증서·C 정책 확인 후 적용 |
 

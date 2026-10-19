@@ -1,6 +1,6 @@
 # 검증 구조
 
-현재 실행 테스트 코드는 없습니다. 각 기능 구현 PR에서 의미 있는 정상·오류 경로 검증을 추가합니다.
+backend/tests/에 앱 테스트 초안이 있으며, integration/shared-pc-smoke.ps1은 두 PC용 MySQL Compose를 한 개발 PC의 격리 환경에서 검증합니다. 실제 학원망 검증과 구분하고 각 기능 구현 PR에서 의미 있는 정상·오류 경로 검증을 추가합니다.
 
 - backend/tests/: Flask 단위/API.
 - tests/auth·support·membership·payments/: 기능별 공동 검증.
