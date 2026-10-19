@@ -4,7 +4,9 @@ React·Flask·MySQL 고객 포털에 네트워크 접근 통제, 보안 관제, 
 
 ## 현재 상태
 
-기본 디렉터리와 개발 계약을 준비했습니다. 앱 코드, 의존성·잠금 파일, Dockerfile, Compose, k3s 매니페스트 및 실제 장비 설정은 아직 구현하지 않았습니다. 현재 저장소만으로 서비스를 실행할 수는 없습니다. `.gitkeep`은 빈 작업 폴더를 Git에 보관하기 위한 파일입니다.
+기본 디렉터리와 개발 계약, B의 Docker·로컬 Compose·MySQL 복제 실습·백업 및 k3s/Nginx/Keepalived 템플릿을 준비했습니다. A 앱 코드와 의존성·잠금 파일은 아직 없으며 실제 공용 PC에는 적용하지 않았습니다. 격리된 DB 실습은 실행할 수 있지만 앱 전체 서비스는 아직 실행할 수 없습니다.
+
+B 담당자는 [개발·실습 시작 가이드](docs/operations/b-start-here.md)와 [검증 기록](docs/operations/b-verification.md)부터 확인합니다.
 
 ## 먼저 읽기
 
@@ -32,7 +34,7 @@ React·Flask·MySQL 고객 포털에 네트워크 접근 통제, 보안 관제, 
 ## 시작 순서
 
 - A: 최소 React·Flask와 Health API, DB 모델·단일 Migration 준비.
-- B: 실행 계약 확인 후 앱 이미지와 로컬 Compose 준비.
+- B: 격리된 DB 복제·복원 실습, 장비 확인, A 앱 통합 후 이미지 빌드와 공용 PC 검증.
 - C: 장비 조건·주소·허용/차단 통신표 작성.
 - D: 표준 이벤트·샘플과 Mock API 기반 자동화 준비.
 - 최소 연동: 화면 → API → DB → 공유 로그인 → 이벤트 → 티켓 → 알림.
