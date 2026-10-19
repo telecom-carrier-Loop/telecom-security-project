@@ -4,5 +4,6 @@ ARG REPLICATION_ROLE
 COPY --chmod=644 common.cnf /etc/mysql/conf.d/10-common.cnf
 COPY --chmod=644 ${REPLICATION_ROLE}.cnf /etc/mysql/conf.d/20-role.cnf
 COPY --chmod=755 start-mysql.sh /usr/local/bin/start-shared-mysql
+COPY --chmod=755 mysql-local.sh /usr/local/bin/mysql-local
 ENTRYPOINT ["/usr/local/bin/start-shared-mysql"]
 CMD ["mysqld"]
