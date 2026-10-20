@@ -27,6 +27,13 @@ class User(TimestampMixin, db.Model):
     previous_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     failed_attempts_before_login: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     password_changed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 계정 잠금 (관리자 수동 또는 8-브루트포스 계정잠금봇). 잠기면 로그인·세션 모두 거부, 관리자가 해제할 때까지 유지
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    lock_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    @property
+    def is_locked(self) -> bool:
+        return self.locked_at is not None
 
     def set_password(self, raw: str) -> None:
         self.password_hash = PASSWORD_HASHER.hash(raw)

@@ -53,6 +53,11 @@ def dashboard():
                         "created_at": t.created_at.isoformat() + "Z"} for t in open_tickets],
         },
         "billing": {"unpaid_count": unpaid_count, "unpaid_amount": int(unpaid_amount)},
+        "protection": {
+            "active_blocks": _active_blocks(now),
+            "locked_accounts": User.query.filter(User.locked_at.isnot(None), User.is_active.is_(True)).count(),
+            "privilege_violations": _violations(),
+        },
         "incidents": {
             "open": sum(c for _, c in severity_rows),
             "by_severity": {s: 0 for s in ("critical", "high", "medium", "low", "info")} | dict(severity_rows),
@@ -73,6 +78,13 @@ def customers():
         page = 1
     size = 20
     query = User.query.filter_by(role="CUSTOMER")
+    status = request.args.get("status")
+    if status == "LOCKED":
+        query = query.filter(User.locked_at.isnot(None), User.is_active.is_(True))
+    elif status == "ACTIVE":
+        query = query.filter(User.locked_at.is_(None), User.is_active.is_(True))
+    elif status == "DEACTIVATED":
+        query = query.filter(User.is_active.is_(False))
     if q:
         like = f"%{q}%"
         query = query.filter(or_(User.name.like(like), User.email.like(like)))
@@ -85,6 +97,8 @@ def customers():
         account = MembershipAccount.query.filter_by(user_id=u.id).first()
         items.append({
             "id": u.id, "name": u.name, "email": mask_email(u.email), "is_active": u.is_active,
+            "status": _status(u), "locked_at": _iso(u.locked_at), "lock_reason": u.lock_reason,
+            "login_failures_15m": _failures_15m(u.email),
             "created_at": _iso(u.created_at), "last_login_at": _iso(u.last_login_at),
             "plan": sub.plan.name if sub else None,
             "membership": account.tier.name if account else None,
@@ -109,6 +123,8 @@ def customer_detail(user_id):
     payments = Payment.query.filter_by(user_id=u.id).order_by(Payment.id.desc()).limit(10).all()
     return ok({"customer": {
         "id": u.id, "name": u.name, "email": u.email, "is_active": u.is_active,
+        "status": _status(u), "locked_at": _iso(u.locked_at), "lock_reason": u.lock_reason,
+        "login_failures_15m": _failures_15m(u.email),
         "created_at": _iso(u.created_at), "last_login_at": _iso(u.last_login_at),
         "subscription": None if not sub else {"phone_number": sub.phone_number, "plan": sub.plan.to_dict(),
                                               "started_on": sub.started_on.isoformat()},
@@ -122,6 +138,29 @@ def customer_detail(user_id):
 
 def _iso(d):
     return d.isoformat() + "Z" if d else None
+
+
+def _active_blocks(now) -> int:
+    from ..incidents.protection import _active_blocks_query
+    return _active_blocks_query(now).count()
+
+
+def _violations() -> int:
+    from ..incidents.protection import privilege_violations
+    return len(privilege_violations())
+
+
+def _status(u) -> str:
+    if not u.is_active:
+        return "DEACTIVATED"
+    return "LOCKED" if u.locked_at else "ACTIVE"
+
+
+def _failures_15m(email: str) -> int:
+    from ..auth.service import _key_hash
+    return AuthLoginFailure.query.filter(
+        AuthLoginFailure.key_type == "ACCOUNT", AuthLoginFailure.key_hash == _key_hash(email),
+        AuthLoginFailure.created_at > utcnow() - timedelta(minutes=15)).count()
 
 
 def _unpaid(user_id: int) -> int:

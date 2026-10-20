@@ -82,3 +82,8 @@ def test_manual_create_and_assign_validation(client):
     res = client.post("/api/admin/incidents", json={"title": "수동 보고", "severity": "low"}, headers=csrf(client))
     assert res.status_code == 201 and res.json["data"]["incident"]["source"] == "manual"
     assert client.patch("/api/admin/incidents/1", json={"assigned_to": 1}, headers=csrf(client)).status_code == 422
+
+
+def test_incident_api_accepts_x_api_key(client):
+    res = client.post(URL, json=EVENT, headers={"X-API-Key": "test-incident-token", "X-Workflow": "6-incident"})
+    assert res.status_code == 201

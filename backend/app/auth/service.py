@@ -95,6 +95,10 @@ def authenticate(email_value, password) -> User:
         security_event("auth.login.failed", "low", "로그인 실패", reason="invalid_credentials")
         raise ApiError("INVALID_CREDENTIALS", "이메일 또는 비밀번호가 올바르지 않습니다.", 401)
 
+    if user.is_locked:
+        security_event("auth.account.login_locked", "medium", "잠긴 계정 로그인 시도", target_user_id=user.id)
+        raise ApiError("ACCOUNT_LOCKED", "보안 정책에 따라 잠긴 계정입니다. 고객센터로 문의하세요.", 403)
+
     # 이번 로그인 직전 실패 횟수(지난 로그인 이후)를 남기고, 계정 카운터만 비운다 (IP 카운터는 유지)
     since = user.last_login_at or user.created_at
     user.failed_attempts_before_login = AuthLoginFailure.query.filter(

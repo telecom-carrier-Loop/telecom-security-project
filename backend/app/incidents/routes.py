@@ -1,7 +1,7 @@
 """보안 인시던트 (docs/contracts/incident-api.md, 통합 기준 12절)
 
 자동 수신: POST /api/internal/incident-events
-  - Authorization: Bearer <INCIDENT_API_TOKEN>. 브라우저 세션·CSRF와 분리, 관리자 API 권한 없음
+  - Authorization: Bearer <INCIDENT_API_TOKEN> (또는 X-API-Key). 브라우저 세션·CSRF와 분리, 관리자 API 권한 없음
   - (source, event_id) UNIQUE + 정규화 본문 해시
     최초 201 / 같은 키·같은 원본 200 deduplicated=true / 같은 키·다른 원본 409 / 입력 오류 422
   - 공개·관리 Nginx 모두 /api/internal 을 외부에 노출하지 않는다 (C·B)
@@ -158,17 +158,14 @@ def create_or_get(fields: dict, actor_id=None, note=None):
 
 @bp.post("/internal/incident-events")
 def internal_incident_event():
-    expected = current_app.config.get("INCIDENT_API_TOKEN") or ""
-    if not expected:
-        raise ApiError("INTEGRATION_DISABLED", "INCIDENT_API_TOKEN 이 설정되지 않았습니다.", 503)
-    auth = request.headers.get("Authorization", "")
-    given = auth[7:] if auth.startswith("Bearer ") else ""
-    if not given or not hmac.compare_digest(given.encode(), expected.encode()):
-        current_app.logger.warning("incident.ingest.unauthorized")
-        raise ApiError("UNAUTHORIZED", "인증이 필요합니다.", 401)
+    from .protection import audit, check_automation_token
+    workflow = check_automation_token("INCIDENT_API_TOKEN")  # Bearer 또는 X-API-Key
     if not request.is_json:
         raise ApiError("UNSUPPORTED_MEDIA_TYPE", "JSON 요청만 허용합니다.", 415)
     incident, created = create_or_get(validate_event(body()))
+    audit("incident.ingest", "incident", incident.id, actor_type="AUTOMATION", workflow=workflow,
+          result="DONE" if created else "ALREADY")
+    db.session.commit()
     return ok({"incident_id": incident.id, "deduplicated": not created, "status": incident.status},
               201 if created else 200)
 

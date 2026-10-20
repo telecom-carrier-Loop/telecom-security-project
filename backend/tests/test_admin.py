@@ -65,3 +65,9 @@ def test_monitoring_links(client, monkeypatch):
     links = {l["key"]: l for l in client.get("/api/admin/monitoring-links").json["data"]["links"]}
     assert links["wazuh"]["url"] == "https://manage2.telecom.test/wazuh/"
     assert links["graylog"]["url"] == "http://localhost:9000"
+
+
+def test_dashboard_protection_counts(client):
+    login(client, "admin@test.local")
+    data = client.get("/api/admin/dashboard").json["data"]["protection"]
+    assert data == {"active_blocks": 1, "locked_accounts": 0, "privilege_violations": 0}

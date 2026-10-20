@@ -17,7 +17,7 @@ export default function AdminDashboardPage() {
   const { loading, error, data, reload } = useApi<AdminDashboard>('/admin/dashboard')
   if (loading) return <Loading />
   if (error || !data) return <ErrorState error={error} onRetry={reload} />
-  const { customers, support, billing, incidents } = data
+  const { customers, support, billing, incidents, protection } = data
 
   return (
     <section className="page">
@@ -45,6 +45,24 @@ export default function AdminDashboardPage() {
           <span className="tile__value">{billing.unpaid_count}건</span>
           <span className="tile__sub">{won(billing.unpaid_amount)}</span>
         </div>
+      </div>
+
+      <div className="grid grid--3">
+        <Link to="/admin/ip-blocks" className="tile">
+          <span className="tile__label">차단 중인 IP</span>
+          <span className="tile__value">{protection.active_blocks}개</span>
+          <span className="tile__sub">자동·수동 차단 포함</span>
+        </Link>
+        <Link to="/admin/customers" className="tile">
+          <span className="tile__label">잠긴 계정</span>
+          <span className="tile__value">{protection.locked_accounts}개</span>
+          <span className="tile__sub">로그인·세션 거부 중</span>
+        </Link>
+        <Link to="/admin/privileges" className="tile">
+          <span className="tile__label">권한 정책 위반</span>
+          <span className="tile__value">{protection.privilege_violations}명</span>
+          <span className="tile__sub">허용목록 밖 관리자</span>
+        </Link>
       </div>
 
       <div className="grid grid--2">

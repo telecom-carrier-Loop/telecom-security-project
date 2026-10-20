@@ -11,6 +11,9 @@ import HomePage from '../../features/dashboard/HomePage'
 import UsagePage from '../../features/dashboard/UsagePage'
 import AdminIncidentDetailPage from '../../features/incidents/AdminIncidentDetailPage'
 import AdminIncidentsPage from '../../features/incidents/AdminIncidentsPage'
+import AdminAutomationPage from '../../features/incidents/AdminAutomationPage'
+import AdminIpBlocksPage from '../../features/incidents/AdminIpBlocksPage'
+import AdminPrivilegesPage from '../../features/incidents/AdminPrivilegesPage'
 import AdminBenefitsPage from '../../features/membership/AdminBenefitsPage'
 import MembershipPage from '../../features/membership/MembershipPage'
 import AdminPaymentsPage from '../../features/payments/AdminPaymentsPage'
@@ -59,6 +62,9 @@ export const router = createBrowserRouter([
         { path: 'customers/:id', element: <AdminCustomerDetailPage /> },
         { path: 'payments', element: <AdminPaymentsPage /> },
         { path: 'benefits', element: <AdminBenefitsPage /> },
+        { path: 'ip-blocks', element: <AdminIpBlocksPage /> },
+        { path: 'privileges', element: <AdminPrivilegesPage /> },
+        { path: 'automation', element: <AdminAutomationPage /> },
       ],
     }],
   },

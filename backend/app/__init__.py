@@ -25,6 +25,9 @@ def create_app(config_class=Config) -> Flask:
     register_error_handlers(app)
     _register_blueprints(app)
 
+    # 차단 IP 검사 → 세션 로드 순서 (차단된 IP는 세션 조회 전에 403)
+    from .incidents.protection import guard_blocked_ip
+    app.before_request(guard_blocked_ip)
     from .core.sessions import init_sessions
     init_sessions(app)
 
@@ -38,6 +41,7 @@ def _register_blueprints(app: Flask) -> None:
     from .auth.routes import bp as auth_bp
     from .dashboard.routes import bp as dashboard_bp
     from .health.routes import bp as health_bp
+    from .incidents.protection_routes import bp as protection_bp
     from .incidents.routes import bp as incidents_bp
     from .membership.routes import admin_bp as membership_admin_bp
     from .membership.routes import bp as membership_bp
@@ -46,5 +50,5 @@ def _register_blueprints(app: Flask) -> None:
     from .support.routes import bp as support_bp
 
     for bp in (health_bp, auth_bp, dashboard_bp, plans_bp, support_bp,
-               membership_bp, membership_admin_bp, payments_bp, incidents_bp, admin_bp):
+               membership_bp, membership_admin_bp, payments_bp, incidents_bp, protection_bp, admin_bp):
         app.register_blueprint(bp)

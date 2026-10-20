@@ -28,3 +28,9 @@ export const ROLE_LABEL: Record<string, string> = { CUSTOMER: '고객', ADMIN: '
 export const TICKET_STATUS: Record<string, string> = { OPEN: '접수', IN_PROGRESS: '상담 중', ANSWERED: '답변 완료', CLOSED: '종료' }
 export const INCIDENT_STATUS: Record<string, string> = { OPEN: '신규', INVESTIGATING: '조사 중', RESOLVED: '해결', CLOSED: '종료' }
 export const SEVERITY_LABEL: Record<string, string> = { critical: '긴급', high: '높음', medium: '보통', low: '낮음', info: '정보' }
+
+// 표 안에서 쓰는 짧은 날짜·시간 (예: 10/20 10:21)
+export const compactDateTime = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleString('ko-KR', {
+    timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+  }) : '-'

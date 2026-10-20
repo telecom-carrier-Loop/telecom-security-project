@@ -286,3 +286,22 @@ main:has(.page--wide) { max-width: 1400px; }
 a.tool-card:hover { border-color: var(--signal); }
 .tool-card--off { border-style: dashed; opacity: 0.75; }
 .tool-card__url { font-size: 0.78rem; color: var(--ink-soft); word-break: break-all; }
+
+/* ---------- 보안 대시보드 ---------- */
+.grid--3 { grid-template-columns: repeat(3, 1fr); }
+.filters__spacer { flex: 1; }
+.table-wrap { overflow-x: auto; width: 100%; }
+.row--locked td { background: color-mix(in srgb, var(--danger) 6%, transparent); }
+.inline-form { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+.inline-form input, .inline-form select { width: auto; }
+.inline-form .grow { flex: 1; min-width: 240px; }
+.notice--danger { background: #fdecea; border: 1px solid #f2b8b1; color: #9b2c20; }
+.flow-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+.flow-card .panel__head h2 { font-size: 0.95rem; }
+.flow-card__path { font-size: 0.75rem; color: var(--ink-soft); margin: 0; word-break: break-all; }
+@media (max-width: 860px) { .grid--3 { grid-template-columns: 1fr; } }
+.table th, .table td .btn, .table .tag { white-space: nowrap; }
+.table td.mono { white-space: nowrap; }
+.table--compact td { white-space: nowrap; }
+.table--compact td.wrap { white-space: normal; min-width: 160px; }
+.shell--admin main { max-width: 1400px; }
