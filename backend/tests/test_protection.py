@@ -191,3 +191,44 @@ def test_automation_status_groups_by_workflow(client):
     assert flows["4-ip-block"]["last_at"]  # 시드의 자동 차단 기록
     assert flows["6-incident"]["webhook"] == "/webhook/incident"
     assert SecurityAuditLog.query.filter_by(actor_type="AUTOMATION").count() >= 3
+
+
+# ---------- 자동화 기록 보기·삭제 ----------
+
+def test_automation_logs_list_and_unknown(client):
+    client.post("/api/internal/ip-blocks", json={"ip": "198.51.100.50"}, headers=TOKEN)  # X-Workflow 없음
+    client.post("/api/internal/ip-blocks", json={"ip": "198.51.100.51"}, headers={**TOKEN, "X-Workflow": "4-ip-block"})
+    login(client, "admin@test.local")
+    unknown = client.get("/api/admin/automation-logs?workflow=unknown").json["data"]
+    assert unknown["total"] == 1 and unknown["logs"][0]["target"] == "198.51.100.50"
+    assert unknown["logs"][0]["workflow"] == "unknown" and unknown["logs"][0]["action_label"] == "IP 차단"
+    four = client.get("/api/admin/automation-logs?workflow=4-ip-block").json["data"]
+    assert four["name"] == "4-ip 차단봇" and four["total"] == 2  # 시드 1건 + 방금 1건
+
+
+def test_delete_selected_and_all_keeps_actions_and_records_purge(client):
+    client.post("/api/internal/ip-blocks", json={"ip": "198.51.100.52"}, headers=TOKEN)
+    client.post("/api/internal/ip-blocks", json={"ip": "198.51.100.53"}, headers=TOKEN)
+    login(client, "admin@test.local")
+    logs = client.get("/api/admin/automation-logs?workflow=unknown").json["data"]["logs"]
+    res = client.post("/api/admin/automation-logs/delete", json={"ids": [logs[0]["id"]], "reason": "Postman 시험"},
+                      headers=csrf(client))
+    assert res.json["data"]["deleted"] == 1
+    res = client.post("/api/admin/automation-logs/delete", json={"workflow": "unknown", "all": True}, headers=csrf(client))
+    assert res.json["data"]["deleted"] == 1
+    assert client.get("/api/admin/automation-logs?workflow=unknown").json["data"]["total"] == 0
+    # 기록만 지워지고 차단은 그대로
+    assert client.get("/api/plans", headers=_from("198.51.100.52")).status_code == 403
+    # 삭제 사실은 관리자 기록으로 남고, 자동화 기록이 아니라서 이 API로는 지워지지 않음
+    purge = SecurityAuditLog.query.filter_by(action="audit.purge").all()
+    assert len(purge) == 2 and all(p.actor_type == "ADMIN" for p in purge)
+    ids = [p.id for p in purge]
+    res = client.post("/api/admin/automation-logs/delete", json={"ids": ids}, headers=csrf(client))
+    assert res.json["data"]["deleted"] == 0
+    assert SecurityAuditLog.query.filter(SecurityAuditLog.id.in_(ids)).count() == 2
+
+
+def test_automation_logs_admin_only(client):
+    login(client, "alice@test.local")
+    assert client.get("/api/admin/automation-logs").status_code == 403
+    assert client.post("/api/admin/automation-logs/delete", json={"ids": [1]}, headers=csrf(client)).status_code == 403

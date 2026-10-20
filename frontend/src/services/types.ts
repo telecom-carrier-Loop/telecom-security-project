@@ -254,3 +254,15 @@ export interface AutomationWorkflow {
   week: number
   by_action: Record<string, number>
 }
+
+export interface AutomationLog {
+  id: number
+  created_at: string
+  workflow: string
+  action: string
+  action_label: string
+  target_type: 'ip' | 'user' | 'incident' | string
+  target: string
+  result: 'DONE' | 'ALREADY' | 'SKIPPED' | string
+  reason: string | null
+}
