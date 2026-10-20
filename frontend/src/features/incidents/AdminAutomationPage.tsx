@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import ErrorState from '../../components/common/ErrorState'
 import Loading from '../../components/common/Loading'
 import Tag from '../../components/common/Tag'
@@ -28,7 +29,9 @@ export default function AdminAutomationPage() {
             <article key={w.key} className="panel flow-card">
               <header className="panel__head">
                 <h2>{w.name}</h2>
-                <Tag tone={!w.last_at ? 'neutral' : stale ? 'warn' : 'ok'}>{!w.last_at ? '기록 없음' : stale ? '24시간 이상 조용함' : '동작 중'}</Tag>
+                <Tag tone={w.key === 'unknown' ? 'warn' : !w.last_at ? 'neutral' : stale ? 'warn' : 'ok'}>
+                  {w.key === 'unknown' ? '이름 없는 요청' : !w.last_at ? '기록 없음' : stale ? '24시간 이상 조용함' : '동작 중'}
+                </Tag>
               </header>
               <dl className="facts">
                 <div><dt>마지막 처리</dt><dd>{w.last_at ? dateTime(w.last_at) : '-'}</dd></div>
@@ -39,6 +42,9 @@ export default function AdminAutomationPage() {
               )}
               {w.webhook && <p className="mono flow-card__path">n8n {w.webhook}<br />→ {w.api}</p>}
               <p className="mono flow-card__path">X-Workflow: {w.key}</p>
+              <Link to={`/admin/automation/${encodeURIComponent(w.key)}`} className="btn btn--sm btn--ghost flow-card__link">
+                기록 보기{w.week ? ` (${w.week})` : ''}
+              </Link>
             </article>
           )
         })}

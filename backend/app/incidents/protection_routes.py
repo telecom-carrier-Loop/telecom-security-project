@@ -12,6 +12,8 @@
   GET    /api/admin/privileges                            관리자 목록 + 허용목록 위반
   POST   /api/admin/users/{id}/revoke-admin               {reason}
   GET    /api/admin/automation-status                     워크플로별 최근 처리
+  GET    /api/admin/automation-logs?workflow=&page=       자동화 기록 보기 (unknown = X-Workflow 없이 들어온 요청)
+  POST   /api/admin/automation-logs/delete                {ids:[..]} 또는 {workflow, all:true}, reason — 시험 기록 정리
 
 자동화(n8n, AUTOMATION_API_TOKEN — Authorization: Bearer 또는 X-API-Key, 선택 헤더 X-Workflow)
   POST   /api/internal/ip-blocks                          {ip 또는 src_ip, reason, minutes}
@@ -248,12 +250,79 @@ def automation_status():
         s["by_action"][ACTION_LABEL.get(r.action, r.action)] += 1
     known = {k for k, *_ in KNOWN_WORKFLOWS}
     items = []
-    for key, name, webhook, api in KNOWN_WORKFLOWS + [(k, k, None, None) for k in stats if k not in known]:
+    extra = [(k, "이름 없는 요청 (X-Workflow 없음)" if k == "unknown" else k, None, None)
+             for k in stats if k not in known]
+    for key, name, webhook, api in KNOWN_WORKFLOWS + extra:
         s = stats.get(key)
         items.append({"key": key, "name": name, "webhook": webhook, "api": api,
                       "last_at": _iso(s["last_at"]) if s else None, "today": s["today"] if s else 0,
                       "week": s["week"] if s else 0, "by_action": dict(s["by_action"]) if s else {}})
     return ok({"workflows": items})
+
+
+TARGET_LABEL = {"ip": "IP", "user": "회원", "incident": "인시던트"}
+
+
+def _log_dict(r: SecurityAuditLog) -> dict:
+    return {"id": r.id, "created_at": _iso(r.created_at), "workflow": r.workflow or "unknown",
+            "action": r.action, "action_label": ACTION_LABEL.get(r.action, r.action),
+            "target_type": r.target_type, "target": r.target, "result": r.result, "reason": r.reason}
+
+
+def _automation_logs_query(workflow):
+    query = SecurityAuditLog.query.filter(SecurityAuditLog.actor_type == "AUTOMATION")
+    if workflow == "unknown":  # X-Workflow 헤더 없이 들어온 요청 (Postman 시험 등)
+        query = query.filter(SecurityAuditLog.workflow.is_(None))
+    elif workflow:
+        query = query.filter(SecurityAuditLog.workflow == workflow)
+    return query
+
+
+@bp.get("/admin/automation-logs")
+@roles_required(ROLE_ADMIN)
+def automation_logs():
+    """자동화 기록 보기. ?workflow=4-ip-block|unknown&page=1 (최신순 50개씩)"""
+    workflow, page, size = (request.args.get("workflow") or "").strip()[:64], _page(), 50
+    query = _automation_logs_query(workflow)
+    total = query.count()
+    rows = query.order_by(SecurityAuditLog.created_at.desc(), SecurityAuditLog.id.desc()) \
+        .offset((page - 1) * size).limit(size).all()
+    name = "이름 없는 요청" if workflow == "unknown" else \
+        next((n for k, n, *_ in KNOWN_WORKFLOWS if k == workflow), workflow or "전체")
+    return ok({"workflow": workflow or None, "name": name, "logs": [_log_dict(r) for r in rows],
+               "page": page, "size": size, "total": total})
+
+
+@bp.post("/admin/automation-logs/delete")
+@roles_required(ROLE_ADMIN)
+def delete_automation_logs():
+    """자동화 기록 삭제 (시험 데이터 정리용).
+
+    - {ids: [..]} 선택 삭제, 또는 {workflow: "unknown", all: true} 그 워크플로 기록 전체 삭제
+    - 기록만 지운다. 이미 처리된 차단·잠금·인시던트는 그대로 남는다 (각 화면에서 해제·종료)
+    - 자동화(AUTOMATION) 기록만 지울 수 있고, 관리자 작업 기록은 지울 수 없다
+    - 삭제했다는 사실은 관리자 기록(audit.purge)으로 남긴다 (이 기록은 지울 수 없음)
+    """
+    data, admin = body(), current_user()
+    reason = svc.clean_reason(data.get("reason"), "시험 기록 정리")
+    if data.get("all") is True:
+        workflow = (data.get("workflow") or "").strip()[:64]
+        if not workflow:
+            raise validation_error({"workflow": "전체 삭제할 워크플로를 지정하세요."})
+        query = _automation_logs_query(workflow)
+        label = f"{workflow} 전체"
+    else:
+        ids = [i for i in (data.get("ids") or []) if isinstance(i, int) and not isinstance(i, bool)][:500]
+        if not ids:
+            raise validation_error({"ids": "삭제할 기록을 선택하세요."})
+        query = _automation_logs_query(None).filter(SecurityAuditLog.id.in_(ids))
+        label = f"선택 {len(ids)}건"
+    deleted = query.delete(synchronize_session=False)
+    svc.audit("audit.purge", "audit", f"{label} → {deleted}건", actor_type="ADMIN", actor_id=admin.id, reason=reason)
+    db.session.commit()
+    current_app.logger.info("automation.logs.deleted", extra={"event": {"evidence": {
+        "admin_id": admin.id, "deleted": deleted, "scope": label}}})
+    return ok({"deleted": deleted})
 
 
 # ================= 자동화 (n8n) =================

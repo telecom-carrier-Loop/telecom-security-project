@@ -263,3 +263,42 @@ def admin_note(incident_id):
     db.session.add(IncidentHistory(incident_id=incident.id, actor_id=current_user().id, action="NOTE", note=note))
     db.session.commit()
     return ok({"incident": incident_dict(incident, detail=True)}, 201)
+
+
+CLOSED_STATUSES = ("RESOLVED", "CLOSED")
+
+
+@bp.post("/admin/incidents/delete")
+@roles_required(ROLE_ADMIN)
+def admin_delete():
+    """인시던트 삭제 (시험 데이터·오탐 정리용).
+
+    {ids: [..], reason, include_open: false}
+    - 기본은 해결(RESOLVED)·종료(CLOSED)된 인시던트만 지운다. 처리 중인 공격 기록이 실수로 사라지지 않게
+    - 처리 안 된 것(OPEN·INVESTIGATING)까지 지우려면 include_open: true 를 명시해야 한다
+    - 대응 이력도 함께 지운다. 차단·잠금 등 이미 실행된 조치는 남는다
+    - 무엇을 지웠는지(출처·이벤트 ID·제목)는 지울 수 없는 관리자 작업 기록으로 남긴다
+    - 같은 (source, event_id) 이벤트가 다시 오면 새 티켓이 생긴다
+    """
+    from .protection import audit, clean_reason
+
+    data, admin = body(), current_user()
+    ids = [i for i in (data.get("ids") or []) if isinstance(i, int) and not isinstance(i, bool)][:200]
+    if not ids:
+        raise validation_error({"ids": "삭제할 인시던트를 선택하세요."})
+    include_open = data.get("include_open") is True
+    reason = clean_reason(data.get("reason"), "인시던트 정리")
+
+    rows = SecurityIncident.query.filter(SecurityIncident.id.in_(ids)).all()
+    targets = [i for i in rows if include_open or i.status in CLOSED_STATUSES]
+    skipped_open = len(rows) - len(targets)
+    for inc in targets:
+        audit("incident.delete", "incident", inc.id, actor_type="ADMIN", actor_id=admin.id,
+              reason=f"{reason} | {inc.source}:{inc.event_id} | {inc.status} | {inc.title}")
+        IncidentHistory.query.filter_by(incident_id=inc.id).delete(synchronize_session=False)
+        db.session.delete(inc)
+    db.session.commit()
+    current_app.logger.info("incident.deleted", extra={"event": {"evidence": {
+        "admin_id": admin.id, "deleted": len(targets), "skipped_open": skipped_open}}})
+    return ok({"deleted": len(targets), "skipped_open": skipped_open,
+               "not_found": len(set(ids)) - len(rows)})

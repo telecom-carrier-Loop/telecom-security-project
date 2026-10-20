@@ -87,3 +87,34 @@ def test_manual_create_and_assign_validation(client):
 def test_incident_api_accepts_x_api_key(client):
     res = client.post(URL, json=EVENT, headers={"X-API-Key": "test-incident-token", "X-Workflow": "6-incident"})
     assert res.status_code == 201
+
+
+# ---------- 인시던트 삭제 ----------
+
+def test_delete_only_closed_by_default(client):
+    from app.models import IncidentHistory, SecurityAuditLog, SecurityIncident
+    login(client, "admin@test.local")
+    open_id = SecurityIncident.query.filter_by(status="OPEN").first().id
+    resolved_id = SecurityIncident.query.filter_by(status="RESOLVED").first().id
+    res = client.post("/api/admin/incidents/delete", json={"ids": [open_id, resolved_id], "reason": "시험 정리"},
+                      headers=csrf(client))
+    assert res.json["data"] == {"deleted": 1, "skipped_open": 1, "not_found": 0}
+    from app.extensions import db
+    assert db.session.get(SecurityIncident, resolved_id) is None and db.session.get(SecurityIncident, open_id) is not None
+    assert IncidentHistory.query.filter_by(incident_id=resolved_id).count() == 0
+    log = SecurityAuditLog.query.filter_by(action="incident.delete").one()
+    assert log.actor_type == "ADMIN" and "시험 정리" in log.reason and "seed-zbx:backup-0001" in log.reason
+
+
+def test_delete_open_requires_flag_and_same_event_creates_new_ticket(client):
+    first = client.post(URL, json=EVENT, headers=TOKEN).json["data"]["incident_id"]
+    login(client, "admin@test.local")
+    res = client.post("/api/admin/incidents/delete", json={"ids": [first], "include_open": True}, headers=csrf(client))
+    assert res.json["data"]["deleted"] == 1
+    again = client.post(URL, json=EVENT, headers=TOKEN)
+    assert again.status_code == 201 and again.json["data"]["deduplicated"] is False  # 지운 뒤에는 새 티켓
+
+
+def test_delete_admin_only(client):
+    login(client, "alice@test.local")
+    assert client.post("/api/admin/incidents/delete", json={"ids": [1]}, headers=csrf(client)).status_code == 403

@@ -16,6 +16,7 @@ const SECURITY_MENU: [string, string][] = [
   ['/admin/ip-blocks', '차단 IP'],
   ['/admin/privileges', '권한 점검'],
   ['/admin/automation', '자동화 현황'],
+  ['/admin/grafana', '관제 지표'],
 ]
 
 export default function AdminLayout() {

@@ -305,3 +305,5 @@ a.tool-card:hover { border-color: var(--signal); }
 .table--compact td { white-space: nowrap; }
 .table--compact td.wrap { white-space: normal; min-width: 160px; }
 .shell--admin main { max-width: 1400px; }
+.flow-card__link { align-self: flex-start; margin-top: 0.4rem; text-decoration: none; }
+.grafana-frame { width: 100%; height: calc(100vh - 220px); min-height: 520px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }

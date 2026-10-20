@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { deleteIncidents } from './deleteIncidents'
 import ErrorState from '../../components/common/ErrorState'
 import Loading from '../../components/common/Loading'
 import Tag, { incidentTone, severityTone } from '../../components/common/Tag'
@@ -24,6 +25,7 @@ export default function AdminIncidentDetailPage() {
   const people = useApi<{ assignees: { id: number; name: string }[] }>('/admin/incidents/assignees')
   const [note, setNote] = useState('')
   const [err, setErr] = useState<string | null>(null)
+  const navigate = useNavigate()
   if (loading || people.loading) return <Loading />
   if (error || !data) return <ErrorState error={error} />
   const i = data.incident
@@ -32,6 +34,13 @@ export default function AdminIncidentDetailPage() {
     setErr(null)
     try { await api(`/admin/incidents/${id}`, { method: 'PATCH', body: payload }); reload() }
     catch (ex) { setErr((ex as ApiError).message) }
+  }
+  const remove = async () => {
+    const open = i.status === 'OPEN' || i.status === 'INVESTIGATING'
+    const result = await deleteIncidents([i.id], open ? 1 : 0)
+    if (!result) return
+    if (result.ok) navigate('/admin/incidents', { replace: true })
+    else setErr(result.text)
   }
   const addNote = async (e: FormEvent) => {
     e.preventDefault(); setErr(null)
@@ -44,7 +53,10 @@ export default function AdminIncidentDetailPage() {
       <Link to="/admin/incidents" className="back">← 인시던트 목록</Link>
       <header className="page__header">
         <h1 className="page__title">{i.title}</h1>
-        <Tag tone={incidentTone(i.status)}>{INCIDENT_STATUS[i.status]}</Tag>
+        <div className="row">
+          <Tag tone={incidentTone(i.status)}>{INCIDENT_STATUS[i.status]}</Tag>
+          <button className="btn btn--sm btn--ghost" onClick={remove}>삭제</button>
+        </div>
       </header>
       {err && <div className="notice notice--warn" role="alert">{err}</div>}
 
