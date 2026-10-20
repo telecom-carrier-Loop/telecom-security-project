@@ -31,6 +31,9 @@ function Invoke-Docker([string[]]$Arguments, [switch]$AllowFailure) {
     }
     finally { $ErrorActionPreference = $saved }
     if ($code -ne 0 -and -not $AllowFailure) {
+        if ($Arguments[0] -eq 'start') {
+            throw ('Docker start failed: ' + ($lines -join ' ') + '. Stop; do not repeat switch.')
+        }
         throw ('Docker command failed: ' + $Arguments[0] + '. Stop and report this action; do not publish raw SQL or logs.')
     }
     [PSCustomObject]@{ Code = $code; Lines = @($lines | ForEach-Object { [string]$_ }) }
@@ -47,6 +50,25 @@ function Get-DataMount($Info) {
     $items = @($Info.Mounts | Where-Object Destination -eq '/var/lib/mysql')
     if ($items.Count -ne 1) { throw 'Cannot identify the MySQL data mount.' }
     $items[0]
+}
+
+function Assert-SourcePublishesPrimary($Info) {
+    $network = $Info.PSObject.Properties['NetworkSettings']
+    $ports = $null
+    if ($null -ne $network -and $null -ne $network.Value) {
+        $ports = $network.Value.PSObject.Properties['Ports']
+    }
+    $entry = $null
+    if ($null -ne $ports -and $null -ne $ports.Value) {
+        $entry = $ports.Value.PSObject.Properties['3306/tcp']
+    }
+    if ($null -ne $entry) {
+        foreach ($binding in @($entry.Value)) {
+            if ($null -ne $binding -and $binding.HostPort -eq '3306' -and
+                $binding.HostIp -in @('', '0.0.0.0', '127.0.0.1', '::')) { return }
+        }
+    }
+    throw 'Configured source does not actively publish 127.0.0.1:3306. Identify and back up the actual Flask database before cutover.'
 }
 
 function Save-State($State) {
@@ -83,6 +105,7 @@ if ($Action -eq 'prepare') {
     $sourceData = Get-DataMount $source
     $candidateData = Get-DataMount $candidate
     if (-not $source.State.Running -or -not $candidate.State.Running) { throw 'Both existing containers must be running for prepare.' }
+    Assert-SourcePublishesPrimary $source
     if ($source.Id -eq $candidate.Id -or $sourceData.Source -eq $candidateData.Source) { throw 'Source and candidate must use different data volumes.' }
     if ($candidateData.Type -ne 'volume' -or -not $candidateData.RW) { throw 'Candidate needs its own writable named data volume.' }
     if ($candidate.HostConfig.NetworkMode -ne 'none') { throw 'Candidate must still have network=none.' }
@@ -152,6 +175,7 @@ if ($Action -eq 'switch') {
     $source = Get-Container 'mysql-server'
     $candidate = Get-Container $state.CandidateId
     if ($source.Id -ne $state.SourceId) { throw 'Original mysql-server identity changed.' }
+    Assert-SourcePublishesPrimary $source
     $sourceData = Get-DataMount $source
     $candidateData = Get-DataMount $candidate
     if ($sourceData.Source -ne $state.SourceData -or $candidateData.Source -ne $state.CandidateData) { throw 'Data mounts changed after prepare.' }
