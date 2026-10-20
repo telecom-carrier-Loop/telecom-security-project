@@ -166,5 +166,5 @@ def test_deactivate(client):
 
 
 def test_admin_cannot_self_deactivate(client):
-    login(client, "security@test.local")
+    login(client, "admin@test.local")
     assert client.post("/api/auth/deactivate", json={"password": "Test1234!"}, headers=csrf(client)).status_code == 403

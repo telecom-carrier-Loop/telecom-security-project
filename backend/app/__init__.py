@@ -12,8 +12,11 @@ def create_app(config_class=Config) -> Flask:
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    # 승인된 한 단계 프록시(호스트 Nginx)만 신뢰한다 (통합 기준 6절)
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    # 승인된 프록시(호스트 Nginx) 단계 수만큼만 X-Forwarded-* 를 신뢰한다 (통합 기준 6절)
+    # Nginx 없이 Flask 를 직접 띄우는 로컬 실습에서는 0 → 클라이언트가 보낸 X-Forwarded-For 를 무시 (IP 위조로 차단 우회 방지)
+    hops = app.config["TRUSTED_PROXY_HOPS"]
+    if hops > 0:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=hops, x_proto=hops, x_host=hops)
 
     db.init_app(app)
     # Migration 정본은 저장소 루트 database/migrations/ (backend/migrations 를 만들지 않음)
@@ -25,6 +28,9 @@ def create_app(config_class=Config) -> Flask:
     register_error_handlers(app)
     _register_blueprints(app)
 
+    # 차단 IP 검사 → 세션 로드 순서 (차단된 IP는 세션 조회 전에 403)
+    from .incidents.protection import guard_blocked_ip
+    app.before_request(guard_blocked_ip)
     from .core.sessions import init_sessions
     init_sessions(app)
 
@@ -38,6 +44,7 @@ def _register_blueprints(app: Flask) -> None:
     from .auth.routes import bp as auth_bp
     from .dashboard.routes import bp as dashboard_bp
     from .health.routes import bp as health_bp
+    from .incidents.protection_routes import bp as protection_bp
     from .incidents.routes import bp as incidents_bp
     from .membership.routes import admin_bp as membership_admin_bp
     from .membership.routes import bp as membership_bp
@@ -46,5 +53,5 @@ def _register_blueprints(app: Flask) -> None:
     from .support.routes import bp as support_bp
 
     for bp in (health_bp, auth_bp, dashboard_bp, plans_bp, support_bp,
-               membership_bp, membership_admin_bp, payments_bp, incidents_bp, admin_bp):
+               membership_bp, membership_admin_bp, payments_bp, incidents_bp, protection_bp, admin_bp):
         app.register_blueprint(bp)

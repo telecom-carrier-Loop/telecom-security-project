@@ -9,8 +9,11 @@ import json
 from datetime import date, timedelta
 
 from app.extensions import db
-from app.models import (Benefit, IncidentHistory, Invoice, MembershipAccount, MembershipTier, Payment, Plan,
-                        PointTransaction, SecurityIncident, Subscription, SupportTicket, UsageRecord, User)
+from datetime import timedelta as _td
+
+from app.models import (Benefit, IncidentHistory, Invoice, IpBlock, IpWhitelist, MembershipAccount, MembershipTier,
+                        Payment, Plan, PointTransaction, SecurityAuditLog, SecurityIncident, Subscription,
+                        SupportTicket, UsageRecord, User)
 from app.models.base import utcnow
 
 TEST_PASSWORD = "Test1234!"
@@ -49,8 +52,7 @@ def seed_data():
 
     alice = make_user("alice@test.local", "김하늘")
     bob = make_user("bob@test.local", "이바다")
-    make_user("support@test.local", "상담관리자", "SUPPORT_ADMIN")
-    sec = make_user("security@test.local", "보안관리자", "SECURITY_ADMIN")
+    sec = make_user("admin@test.local", "관리자", "ADMIN")  # 상담·보안 업무를 함께 보는 통합 관리자
 
     today = date.today()
     period = today.strftime("%Y-%m")
@@ -94,4 +96,13 @@ def seed_data():
         db.session.add(inc)
         db.session.flush()
         db.session.add(IncidentHistory(incident_id=inc.id, action="CREATED", note=f"{src} 이벤트로 생성 (합성)"))
+    # 보안 대시보드: 차단하면 안 되는 loopback + 실습과 같은 자동 차단 1건 (문서용 주소 203.0.113.0/24)
+    for cidr, memo in (("127.0.0.1/32", "loopback (서버 자신)"), ("::1/128", "loopback IPv6")):
+        if not IpWhitelist.query.filter_by(cidr=cidr).first():  # Migration 이 이미 넣었으면 건너뜀
+            db.session.add(IpWhitelist(cidr=cidr, memo=memo))
+    now = utcnow()
+    db.session.add(IpBlock(ip="203.0.113.44", reason="공격 출발지 자동 차단: 6회 로그인 실패(동일 IP)",
+                           source="AUTOMATION", workflow="4-ip-block", created_at=now, expires_at=now + _td(minutes=60)))
+    db.session.add(SecurityAuditLog(actor_type="AUTOMATION", workflow="4-ip-block", action="ip.block",
+                                    target_type="ip", target="203.0.113.44", reason="합성 시드", created_at=now))
     db.session.commit()

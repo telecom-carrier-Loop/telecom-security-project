@@ -70,7 +70,7 @@ def load_session():
     if session is None or not _valid(session, now):
         return
     user = db.session.get(User, session.user_id)
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or user.locked_at is not None:
         return
     if now - session.last_seen_at >= TOUCH_INTERVAL:
         session.last_seen_at = now

@@ -20,8 +20,20 @@ HOST_NAME = os.getenv("HOSTNAME") or socket.gethostname()
 REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{8,128}$")
 
 SECURITY_EVENT_TYPES = {
+    # 통합 기준 12절 기본 이벤트
     "auth.login.failed", "auth.rate_limited", "auth.access.denied", "auth.object_access.denied",
     "payment.validation.failed", "payment.duplicate_request", "membership.redeem.denied",
+    # 보안 대시보드 추가 이벤트 (D의 event-schema 목록에 추가 요청 필요)
+    "security.ip.blocked",          # IP 차단 등록 (수동·자동)
+    "security.ip.released",         # IP 차단 해제 (수동 해제·만료 처리)
+    "security.ip.block_hit",        # 차단된 IP가 처음으로 다시 접근 (차단 1건당 1회만)
+    "security.whitelist.changed",   # 화이트리스트 추가·삭제
+    "auth.account.locked",          # 계정 잠금 (수동·자동)
+    "auth.account.unlocked",        # 계정 잠금 해제
+    "auth.account.login_locked",    # 잠긴 계정으로 로그인 시도 (비밀번호가 맞은 경우)
+    "auth.account.deactivated",     # 관리자가 회원 탈퇴 처리
+    "auth.privilege.violation",     # 허용목록 밖 관리자 발견
+    "auth.role.revoked",            # 관리자 권한 회수 (수동·자동)
 }
 SEVERITIES = ("info", "low", "medium", "high", "critical")
 
@@ -51,6 +63,9 @@ def setup_logging(app):
     else:
         handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     app.logger.handlers = [handler]
+    if app.config.get("GRAYLOG_GELF_HOST"):
+        from .gelf import GelfUdpHandler
+        app.logger.addHandler(GelfUdpHandler(app.config["GRAYLOG_GELF_HOST"], app.config["GRAYLOG_GELF_PORT"]))
     app.logger.setLevel(app.config.get("LOG_LEVEL", "INFO"))
 
     @app.before_request

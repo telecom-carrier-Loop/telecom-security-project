@@ -29,16 +29,14 @@ def test_script_stored_as_text(client):
     assert client.post("/api/support", json=payload, headers=csrf(client)).json["data"]["ticket"]["content"] == payload["content"]
 
 
-def test_role_separation(client):
+def test_customer_cannot_use_admin_reply(client):
     login(client, "alice@test.local")
     assert client.post("/api/admin/support/1/replies", json={"content": "셀프"}, headers=csrf(client)).status_code == 403
-    logout(client)
-    login(client, "security@test.local")
     assert client.get("/api/admin/support").status_code == 403
 
 
 def test_reply_flow_and_edit_lock(client):
-    login(client, "support@test.local")
+    login(client, "admin@test.local")
     res = client.post("/api/admin/support/1/replies", json={"content": "부가서비스 요금이 포함되었습니다."},
                       headers=csrf(client))
     assert res.status_code == 201 and res.json["data"]["ticket"]["status"] == "ANSWERED"
@@ -47,3 +45,10 @@ def test_reply_flow_and_edit_lock(client):
     assert client.get("/api/support/1").json["data"]["ticket"]["replies"][0]["author"] == "상담원"
     assert client.patch("/api/support/1", json={"title": "수정"}, headers=csrf(client)).status_code == 409
     assert client.post("/api/support/1/close", headers=csrf(client)).json["data"]["ticket"]["status"] == "CLOSED"
+
+
+def test_admin_list_has_content_and_masked_customer(client):
+    login(client, "admin@test.local")
+    t = client.get("/api/admin/support").json["data"]["tickets"][0]
+    assert t["content"] == "부가서비스 내역을 확인하고 싶습니다."
+    assert t["customer"]["email"] == "al***@test.local"
