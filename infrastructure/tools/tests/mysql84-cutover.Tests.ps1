@@ -37,6 +37,11 @@ function New-TestCase([string]$Name, [switch]$SameVolume, [switch]$BadProbe) {
     $source = [PSCustomObject]@{
         Id = 'source-id'; Image = 'image26';
         State = [PSCustomObject]@{ Running = $true; ExitCode = 0 };
+        NetworkSettings = [PSCustomObject]@{
+            Ports = [PSCustomObject]@{
+                '3306/tcp' = @([PSCustomObject]@{ HostIp = '0.0.0.0'; HostPort = '3306' })
+            }
+        };
         Mounts = @($sourceMount);
         HostConfig = [PSCustomObject]@{
             NetworkMode = 'bridge';
@@ -59,7 +64,7 @@ function New-TestCase([string]$Name, [switch]$SameVolume, [switch]$BadProbe) {
         Calls = [Collections.Generic.List[object]]::new();
         Sql = [Collections.Generic.List[object]]::new();
         Files = @{}; BadProbe = [bool]$BadProbe; EnableSwitch = $false;
-        CandidateStopExit = 0; ProductionWrongMount = $false
+        CandidateStopExit = 0; ProductionWrongMount = $false; StartPortConflict = $false
     }
     return $caseRoot
 }
@@ -154,6 +159,12 @@ function global:docker {
             'production-id'
             return
         }
+        'start' {
+            if (-not $global:LoopDockerMock.StartPortConflict) { throw 'Unexpected Docker start.' }
+            'Bind for 0.0.0.0:3306 failed: port is already allocated'
+            $global:LASTEXITCODE = 1
+            return
+        }
         default { throw 'Unexpected Docker mutation or unsupported mock command.' }
     }
 }
@@ -177,6 +188,35 @@ function New-PreparedSwitchCase([string]$Name) {
 }
 
 try {
+    # Actual runtime publishing must establish the original database identity.
+    $caseRoot = New-TestCase 'source-without-active-publish'
+    $global:LoopDockerMock.Containers['mysql-server'].NetworkSettings.Ports = [PSCustomObject]@{}
+    $caught = $false
+    try { Invoke-TestAction 'prepare' $caseRoot }
+    catch {
+        $caught = $true
+        Assert-Loop ($_.Exception.Message -like '*does not actively publish*') 'Wrong unpublished-source error.'
+    }
+    Assert-Loop $caught 'Unpublished original was accepted as the Flask database.'
+    Assert-Loop ($global:LoopDockerMock.Sql.Count -eq 0) 'Wrong source reached SQL.'
+    Assert-NoContainerMutation
+    $testCount++
+    Write-Host 'PASS: inactive host publishing blocks prepare before SQL'
+
+    $caseRoot = New-TestCase 'source-on-different-host-port'
+    $global:LoopDockerMock.Containers['mysql-server'].NetworkSettings.Ports.'3306/tcp'[0].HostPort = '3307'
+    $caught = $false
+    try { Invoke-TestAction 'prepare' $caseRoot }
+    catch {
+        $caught = $true
+        Assert-Loop ($_.Exception.Message -like '*does not actively publish*') 'Wrong host-port error.'
+    }
+    Assert-Loop $caught 'A different host port was accepted as 3306.'
+    Assert-Loop ($global:LoopDockerMock.Sql.Count -eq 0) 'Wrong host port reached SQL.'
+    Assert-NoContainerMutation
+    $testCount++
+    Write-Host 'PASS: a different host port cannot identify the Flask database'
+
     # Guard 1: sharing a data volume must fail before any SQL or mutation.
     $caseRoot = New-TestCase 'same-volume' -SameVolume
     $caught = $false
@@ -229,6 +269,20 @@ try {
     Assert-NoContainerMutation
     $testCount++
     Write-Host 'PASS: prepare saves state and changes only candidate app account'
+
+    $caseRoot = New-PreparedSwitchCase 'switch-source-no-longer-published'
+    $global:LoopDockerMock.Containers['mysql-server'].NetworkSettings.Ports = [PSCustomObject]@{}
+    $caught = $false
+    try { Invoke-TestAction 'switch' $caseRoot }
+    catch {
+        $caught = $true
+        Assert-Loop ($_.Exception.Message -like '*does not actively publish*') 'Wrong switched source-port error.'
+    }
+    Assert-Loop $caught 'Switch accepted a source whose published endpoint disappeared.'
+    Assert-Loop ($global:LoopDockerMock.Sql.Count -eq 0) 'Changed source publishing reached SQL.'
+    Assert-NoContainerMutation
+    $testCount++
+    Write-Host 'PASS: lost source publishing blocks switch before any shutdown'
 
     # Switch guard 1: original identity must still match the prepared state.
     $caseRoot = New-PreparedSwitchCase 'switch-source-identity'
@@ -286,6 +340,23 @@ try {
     Assert-Loop $global:LoopDockerMock.Containers.ContainsKey($state.RollbackName) 'Original rollback container was not preserved.'
     $testCount++
     Write-Host 'PASS: wrong production mount prevents start and preserves rollback state'
+
+    $caseRoot = New-PreparedSwitchCase 'switch-docker-port-conflict'
+    $global:LoopDockerMock.StartPortConflict = $true
+    $caught = $false
+    try { Invoke-TestAction 'switch' $caseRoot }
+    catch {
+        $caught = $true
+        Assert-Loop ($_.Exception.Message -like '*Bind for 0.0.0.0:3306 failed*') 'Docker start error was hidden.'
+    }
+    Assert-Loop $caught 'Port conflict unexpectedly succeeded.'
+    $state = Get-Content -LiteralPath (Join-Path $caseRoot '.secrets/mysql84-cutover/state.json') -Raw | ConvertFrom-Json
+    Assert-Loop ($state.Stage -eq 'created') 'Failed start advanced the cutover stage.'
+    $deletions = @($global:LoopDockerMock.Calls | Where-Object { $_[0] -eq 'rm' })
+    Assert-Loop ($deletions.Count -eq 0) 'Failed start deleted a recovery container.'
+    Assert-Loop $global:LoopDockerMock.Containers.ContainsKey($state.RollbackName) 'Failed start lost the original.'
+    $testCount++
+    Write-Host 'PASS: port conflict retains recovery state and exposes the Docker error'
 
     # Configure must preserve unrelated settings and the first original backup.
     $caseRoot = New-TestCase 'configure'
