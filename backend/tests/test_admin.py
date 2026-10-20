@@ -60,6 +60,8 @@ def test_monitoring_links(client, monkeypatch):
     login(client, "admin@test.local")
     links = {l["key"]: l for l in client.get("/api/admin/monitoring-links").json["data"]["links"]}
     assert links["wazuh"]["url"] == "https://localhost" and links["graylog"]["url"] == "http://localhost:9000"
+    assert links["grafana"]["url"] == "http://localhost:3000"
+    assert [l["key"] for l in client.get("/api/admin/monitoring-links").json["data"]["links"]][:3] == ["wazuh", "graylog", "grafana"]
     monkeypatch.setenv("GRAYLOG_URL", "javascript:alert(1)")  # 이상한 주소는 쓰지 않음
     monkeypatch.setenv("WAZUH_DASHBOARD_URL", "https://manage2.telecom.test/wazuh/")
     links = {l["key"]: l for l in client.get("/api/admin/monitoring-links").json["data"]["links"]}
@@ -71,3 +73,14 @@ def test_dashboard_protection_counts(client):
     login(client, "admin@test.local")
     data = client.get("/api/admin/dashboard").json["data"]["protection"]
     assert data == {"active_blocks": 1, "locked_accounts": 0, "privilege_violations": 0}
+
+
+def test_grafana_embed_url(client, monkeypatch):
+    login(client, "admin@test.local")
+    assert client.get("/api/admin/monitoring-links").json["data"]["grafana_embed_url"] is None
+    monkeypatch.setenv("GRAFANA_EMBED_URL", "http://localhost:3000/d/abc123/loop-security?orgId=1")
+    url = client.get("/api/admin/monitoring-links").json["data"]["grafana_embed_url"]
+    assert url.startswith("http://localhost:3000/d/abc123/loop-security?orgId=1&kiosk")
+    assert "timezone=Asia%2FSeoul" in url and "refresh=30s" in url
+    monkeypatch.setenv("GRAFANA_EMBED_URL", "javascript:alert(1)")
+    assert client.get("/api/admin/monitoring-links").json["data"]["grafana_embed_url"] is None

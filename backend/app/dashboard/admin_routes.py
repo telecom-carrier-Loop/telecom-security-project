@@ -175,6 +175,7 @@ MONITORING_TOOLS = [
     # key, 이름, 환경변수, 로컬 기본값, 설명
     ("wazuh", "Wazuh", "WAZUH_DASHBOARD_URL", "https://localhost", "호스트 보안 경보·에이전트 상태"),
     ("graylog", "Graylog", "GRAYLOG_URL", "http://localhost:9000", "중앙 로그 검색·이벤트"),
+    ("grafana", "Grafana", "GRAFANA_URL", "http://localhost:3000", "보안·서비스 지표 대시보드"),
     ("zabbix", "Zabbix", "ZABBIX_URL", None, "서버·서비스 가용성"),
     ("n8n", "n8n", "N8N_EDITOR_URL", None, "인시던트 자동화 워크플로"),
 ]
@@ -194,6 +195,23 @@ def monitoring_links():
     items = []
     for key, name, env, local_default, desc in MONITORING_TOOLS:
         url = _safe_url(os.getenv(env)) or (local_default if local else None)
-        if url or key in ("wazuh", "graylog"):  # 필수 2종은 미설정이어도 자리를 보여준다
+        if url or key in ("wazuh", "graylog", "grafana"):  # 주요 3종은 미설정이어도 자리를 보여준다
             items.append({"key": key, "name": name, "url": url, "description": desc, "env": env})
-    return ok({"links": items})
+    return ok({"links": items, "grafana_embed_url": _grafana_embed_url()})
+
+
+def _grafana_embed_url():
+    """관리자 화면 안에 띄울 Grafana 대시보드 주소 (GRAFANA_EMBED_URL).
+
+    Grafana 쪽에서 GF_SECURITY_ALLOW_EMBEDDING=true, 익명 보기(Viewer)가 켜져 있어야 화면에 보인다.
+    kiosk(메뉴 숨김)·한국 시간·30초 새로고침이 빠져 있으면 붙여 준다.
+    """
+    url = _safe_url(os.getenv("GRAFANA_EMBED_URL"))
+    if not url:
+        return None
+    sep = "&" if "?" in url else "?"
+    for key, value in (("kiosk", ""), ("timezone", "Asia%2FSeoul"), ("refresh", "30s")):
+        if f"{key}=" not in url and f"&{key}&" not in url and not url.endswith(f"&{key}"):
+            url += f"{sep}{key}" + (f"={value}" if value else "")
+            sep = "&"
+    return url

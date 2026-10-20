@@ -12,6 +12,7 @@ import UsagePage from '../../features/dashboard/UsagePage'
 import AdminIncidentDetailPage from '../../features/incidents/AdminIncidentDetailPage'
 import AdminIncidentsPage from '../../features/incidents/AdminIncidentsPage'
 import AdminAutomationPage from '../../features/incidents/AdminAutomationPage'
+import AdminGrafanaPage from '../../features/incidents/AdminGrafanaPage'
 import AdminAutomationLogsPage from '../../features/incidents/AdminAutomationLogsPage'
 import AdminIpBlocksPage from '../../features/incidents/AdminIpBlocksPage'
 import AdminPrivilegesPage from '../../features/incidents/AdminPrivilegesPage'
@@ -66,6 +67,7 @@ export const router = createBrowserRouter([
         { path: 'ip-blocks', element: <AdminIpBlocksPage /> },
         { path: 'privileges', element: <AdminPrivilegesPage /> },
         { path: 'automation', element: <AdminAutomationPage /> },
+        { path: 'grafana', element: <AdminGrafanaPage /> },
         { path: 'automation/:workflow', element: <AdminAutomationLogsPage /> },
       ],
     }],
