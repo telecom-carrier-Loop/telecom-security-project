@@ -34,6 +34,11 @@ def _key_hash(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+def account_hash(email: str) -> str:
+    """로그·자동화에서 계정을 가리키는 값 (이메일 원문 대신)."""
+    return _key_hash(_norm_email(email))
+
+
 def register(data: dict) -> User:
     email, password = _norm_email(data.get("email")), data.get("password") or ""
     name = data.get("name").strip() if isinstance(data.get("name"), str) else ""
@@ -75,7 +80,8 @@ def _check_rate_limit(account_key: str, ip_key: str, now):
         if count >= limit:
             retry_after = max(int((oldest + window - now).total_seconds()) + 1, 1)
             security_event("auth.rate_limited", "medium", "로그인 시도 제한 초과",
-                           limit_type=key_type.lower(), retry_after=retry_after)
+                           limit_type=key_type.lower(), retry_after=retry_after,
+                           src_ip=client_ip(), account_hash=account_key)
             raise ApiError("TOO_MANY_ATTEMPTS", "로그인 시도가 많습니다. 잠시 후 다시 시도하세요.", 429,
                            headers={"Retry-After": str(retry_after)})
 
@@ -92,11 +98,15 @@ def authenticate(email_value, password) -> User:
         db.session.add_all([AuthLoginFailure(key_type="ACCOUNT", key_hash=account_key, created_at=now),
                             AuthLoginFailure(key_type="IP", key_hash=ip_key, created_at=now)])
         db.session.commit()
-        security_event("auth.login.failed", "low", "로그인 실패", reason="invalid_credentials")
+        # src_ip: 4-ip 차단봇이 출발지별로 집계, account_hash: 8-계정잠금봇이 계정별로 집계
+        # (이메일 원문은 남기지 않는다. account_hash = SHA-256(소문자 이메일), 없는 계정도 같은 방식)
+        security_event("auth.login.failed", "low", "로그인 실패", reason="invalid_credentials",
+                       src_ip=client_ip(), account_hash=account_key)
         raise ApiError("INVALID_CREDENTIALS", "이메일 또는 비밀번호가 올바르지 않습니다.", 401)
 
     if user.is_locked:
-        security_event("auth.account.login_locked", "medium", "잠긴 계정 로그인 시도", target_user_id=user.id)
+        security_event("auth.account.login_locked", "medium", "잠긴 계정 로그인 시도", target_user_id=user.id,
+                       src_ip=client_ip(), account_hash=account_key)
         raise ApiError("ACCOUNT_LOCKED", "보안 정책에 따라 잠긴 계정입니다. 고객센터로 문의하세요.", 403)
 
     # 이번 로그인 직전 실패 횟수(지난 로그인 이후)를 남기고, 계정 카운터만 비운다 (IP 카운터는 유지)

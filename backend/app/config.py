@@ -42,6 +42,11 @@ class Config:
 
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     LOG_FORMAT = os.getenv("LOG_FORMAT", "json")
+    # 로컬 실습: Graylog 로 GELF(UDP) 직접 전송. 비워 두면 표준 출력만 사용 (공용 PC 기본)
+    GRAYLOG_GELF_HOST = os.getenv("GRAYLOG_GELF_HOST", "").strip()
+    GRAYLOG_GELF_PORT = int(os.getenv("GRAYLOG_GELF_PORT", "12201"))
+    # 신뢰할 프록시 단계 수. Nginx 뒤(공용 PC·로컬 Compose) 1, Flask 직접 실행 0
+    TRUSTED_PROXY_HOPS = int(os.getenv("TRUSTED_PROXY_HOPS", "1"))
 
     # 인증 (통합 기준 7절)
     SESSION_COOKIE_NAME = "__Host-telecom_session"
@@ -74,6 +79,8 @@ class TestConfig(Config):
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     SQLALCHEMY_ENGINE_OPTIONS = {}
     INCIDENT_API_TOKEN = "test-incident-token"
+    GRAYLOG_GELF_HOST = ""
+    TRUSTED_PROXY_HOPS = 1
     AUTOMATION_API_TOKEN = "test-incident-token"
     ADMIN_ALLOWLIST = ["admin@test.local"]
     FIREWALL_PROVIDER = "none"

@@ -63,6 +63,9 @@ def setup_logging(app):
     else:
         handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     app.logger.handlers = [handler]
+    if app.config.get("GRAYLOG_GELF_HOST"):
+        from .gelf import GelfUdpHandler
+        app.logger.addHandler(GelfUdpHandler(app.config["GRAYLOG_GELF_HOST"], app.config["GRAYLOG_GELF_PORT"]))
     app.logger.setLevel(app.config.get("LOG_LEVEL", "INFO"))
 
     @app.before_request

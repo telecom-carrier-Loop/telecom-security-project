@@ -12,8 +12,11 @@ def create_app(config_class=Config) -> Flask:
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    # 승인된 한 단계 프록시(호스트 Nginx)만 신뢰한다 (통합 기준 6절)
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+    # 승인된 프록시(호스트 Nginx) 단계 수만큼만 X-Forwarded-* 를 신뢰한다 (통합 기준 6절)
+    # Nginx 없이 Flask 를 직접 띄우는 로컬 실습에서는 0 → 클라이언트가 보낸 X-Forwarded-For 를 무시 (IP 위조로 차단 우회 방지)
+    hops = app.config["TRUSTED_PROXY_HOPS"]
+    if hops > 0:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=hops, x_proto=hops, x_host=hops)
 
     db.init_app(app)
     # Migration 정본은 저장소 루트 database/migrations/ (backend/migrations 를 만들지 않음)

@@ -15,7 +15,7 @@
 
 자동화(n8n, AUTOMATION_API_TOKEN — Authorization: Bearer 또는 X-API-Key, 선택 헤더 X-Workflow)
   POST   /api/internal/ip-blocks                          {ip 또는 src_ip, reason, minutes}
-  POST   /api/internal/account-locks                      {email 또는 username, reason}
+  POST   /api/internal/account-locks                      {account_hash 또는 email, reason}
   GET    /api/internal/privilege-violations               허용목록 밖 관리자
   POST   /api/internal/role-revocations                   {email, reason} (허용목록 밖 관리자만 회수)
 """
@@ -279,12 +279,21 @@ def internal_lock():
     workflow = svc.check_automation_token()
     data = body()
     email = (data.get("email") or data.get("username") or "").strip().lower()
-    if not email:
-        raise validation_error({"email": "email 또는 username 이 필요합니다."})
-    user = User.query.filter_by(email=email).first()
+    acc_hash = str(data.get("account_hash") or "").strip().lower()
+    if not email and not acc_hash:
+        raise validation_error({"account_hash": "account_hash(로그인 실패 로그의 값) 또는 email 이 필요합니다."})
+    if acc_hash and (len(acc_hash) != 64 or any(c not in "0123456789abcdef" for c in acc_hash)):
+        raise validation_error({"account_hash": "SHA-256 16진수 64자여야 합니다."})
+    if email:
+        user = User.query.filter_by(email=email).first()
+    else:
+        from ..auth.service import account_hash
+        # 계정 수가 많지 않은 실습 규모 기준. 커지면 users 에 email_hash 컬럼(인덱스)을 두면 된다
+        user = next((u for u in User.query.filter_by(is_active=True).all() if account_hash(u.email) == acc_hash), None)
+    target_label = email or f"hash:{acc_hash[:12]}"
     reason = svc.clean_reason(data.get("reason"), "브루트포스 자동 잠금")
     if user is None or not user.is_active:
-        svc.audit("account.lock", "user", email, actor_type="AUTOMATION", workflow=workflow,
+        svc.audit("account.lock", "user", target_label, actor_type="AUTOMATION", workflow=workflow,
                   result="SKIPPED", reason="계정 없음")
         db.session.commit()
         return ok({"locked": False, "result": "NOT_FOUND"})
