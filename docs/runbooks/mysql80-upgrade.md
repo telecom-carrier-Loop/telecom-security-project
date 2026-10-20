@@ -46,14 +46,14 @@ SELECT COUNT(1) AS base_table_count
 FROM information_schema.TABLES
 WHERE TABLE_SCHEMA = 'my_new_board_db' AND TABLE_TYPE = 'BASE TABLE';
 
-SET SESSION group_concat_max_len = 65535;
-SELECT CONCAT('CHECK TABLE ', GROUP_CONCAT(CONCAT('my_new_board_db.', TABLE_NAME) ORDER BY TABLE_NAME SEPARATOR ', '))
-INTO @loop_check
-FROM information_schema.TABLES
-WHERE TABLE_SCHEMA = 'my_new_board_db' AND TABLE_TYPE = 'BASE TABLE';
-PREPARE loop_check_statement FROM @loop_check;
-EXECUTE loop_check_statement;
-DEALLOCATE PREPARE loop_check_statement;
+USE my_new_board_db;
+CHECK TABLE
+    alembic_version, auth_login_failures, auth_sessions,
+    benefit_redemptions, benefits, incident_histories, invoices,
+    ip_blocks, ip_whitelist, membership_accounts, membership_tiers,
+    payment_events, payments, plans, point_transactions,
+    security_audit_logs, security_incidents, subscriptions,
+    support_replies, support_tickets, usage_records, users;
 ```
 
 정상 기준은 버전 `8.4.11`, 테이블 `22`, 각 테이블의 검사 결과 `status / OK`다. `candidate-started`는 Docker 시작 명령 성공만 뜻하며 DB 업그레이드 검증 완료를 뜻하지 않는다.
