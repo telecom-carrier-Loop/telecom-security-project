@@ -2,7 +2,9 @@
 
 ## 적용 상태
 
-PC1 flask_mysql(192.168.3.18) → PC2 mysql-lab(192.168.3.19) TLS·GTID 복제와 PC2 읽기 전용을 유지한다. 현장에서 암호화 자격 증명 저장, BackupSaved의 비대화형 백업, 새 백업의 22개 테이블 격리 복구 PASS를 확인했다. 이 문서는 그다음 단계인 **Windows 작업 스케줄러의 1시간 주기 등록**이다. PC2에서 Install·Test를 통과하기 전에는 실제 예약 완료로 보고하지 않는다.
+PC1 flask_mysql(192.168.3.18) → PC2 mysql-lab(192.168.3.19) TLS·GTID 복제와 PC2 읽기 전용을 유지한다. 현장에서 암호화 자격 증명 저장, BackupSaved의 비대화형 백업, 새 백업의 22개 테이블 격리 복구 PASS를 확인했다. 이후 Repair로 기존 예약을 활성화하고 Test에서 **실제 Windows 작업 스케줄러를 통한 새 백업 생성**도 확인했다.
+
+2026-10-21 현장 결과는 Task state=Ready, Last task result=0x00000000, last-run/last-success=success이며 완료 시각은 15:23:38 KST(상태 원문의 06:23:38Z)다. 화면의 다음 정기 실행은 같은 날 16:14:14 KST였다. 이 결과는 Test의 즉시 실행 성공이며 이후 시간 트리거 실행은 해당 시각이 지난 뒤 Status에서 새 실행 시각으로 구분해 확인한다. 보관 기간과 별도 저장 경로는 아직 확정하지 않았으며 자동 삭제를 활성화하지 않았다.
 
 ## 설치와 실행 검증
 
@@ -82,6 +84,8 @@ powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -Fil
 
 Status는 다음 실행 시각, 스케줄러 종료 코드, 최근 실행·마지막 성공의 시각과 백업 경로, 비공개 로그 경로를 표시한다. 실패가 나도 last-success.json은 이전 성공을 유지한다. 상태 JSON은 원자적으로 교체하므로 실행 중 조회에서 부분 JSON을 읽지 않게 한다. 코드 해시나 작업 정의가 달라지면 실행·재등록을 중단한다.
 
+첫 정기 실행 확인은 화면에 표시된 Next run 시각 이후 **Status만** 실행한다. last-run/last-success의 StartedUtc가 기존 06:23:37Z 이후로 갱신됐고 success, Last task result=0인지 확인한다. 이미 완료한 Test나 Repair를 반복해 정기 실행과 혼동하지 않는다. 그다음 보관 기간·별도 저장장치의 PC2 경로와 현재 용량을 확인하여 보관 정리를 준비한다. 보관 정책이 정해지기 전에는 기존 백업을 삭제하지 않는다.
+
 PC가 켜져 있고 절전 상태가 아니며 **기존 Windows 사용자가 로그인한 상태**여야 한다. 화면 잠금과 로그아웃은 다르다. 로그아웃·전원 종료 동안 이 구성으로 백업을 보장할 수 없으며 Docker Desktop과 MySQL도 실행 중이어야 한다. 로그아웃 상태의 서버 운영은 별도 서비스 구성이 필요하다.
 
 스키마 마이그레이션은 백업과 겹치지 않게 조율한다. 작업을 비활성화한 뒤 이미 실행 중인 백업이 끝났는지 확인하고 진행한다. 완료 후 다시 활성화한다.
@@ -103,6 +107,6 @@ Enable-ScheduledTask -TaskName 'Loop-MySQL84-PC2-Hourly-Backup'
 
 ## 검증 범위
 
-Windows PowerShell 5.1에서 실제 ScheduledTasks CIM 객체의 PT1H·기간 없음·Interactive/Limited·10분 제한을 확인했다. 대역 시험에서는 설치 정의와 변조 차단, 중복 설치·실행 보호, 실패 시 마지막 성공 보존, 이전 결과 오인 방지, 종료 코드 0이어도 새 백업이 없으면 실패하는 동작을 검사했다. 공백·앰퍼샌드가 포함된 경로에서 실제 숨김 PowerShell 프로세스로 등록 명령행·작업 코드·상태 파일 교체를 검증했다. 실제 작업 등록과 Docker/MySQL은 대역이며 현장 PC2의 Install·Test 결과가 최종 확인이다.
+Windows PowerShell 5.1에서 실제 ScheduledTasks CIM 객체의 PT1H·기간 없음·Interactive/Limited·10분 제한을 확인했다. 대역 시험에서는 설치 정의와 변조 차단, 중복 설치·실행 보호, 실패 시 마지막 성공 보존, 이전 결과 오인 방지, 종료 코드 0이어도 새 백업이 없으면 실패하는 동작을 검사했다. 공백·앰퍼샌드가 포함된 경로에서 실제 숨김 PowerShell 프로세스로 등록 명령행·작업 코드·상태 파일 교체를 검증했다. 이후 현장 PC2에서도 Repair와 실제 스케줄러 Test의 새 백업 생성·종료 코드 0·성공 기록 갱신을 확인했다.
 
 근거: [반복 기간 생략 시 무기한 반복](https://learn.microsoft.com/en-us/windows/win32/taskschd/taskschedulerschema-duration-repetitiontype-element), [InteractiveToken은 로그인한 사용자 세션에서 실행](https://learn.microsoft.com/en-us/windows/win32/taskschd/taskschedulerschema-logontype-principaltype-element), [예약 작업 실행 설정](https://learn.microsoft.com/en-us/powershell/module/scheduledtasks/new-scheduledtasksettingsset).
