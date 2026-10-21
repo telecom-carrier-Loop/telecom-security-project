@@ -50,7 +50,14 @@ function global:docker {
                 if(-not $m.Incomplete) { $dump+='-- Dump completed on fixture' }
                 $m.Files['live:'+$out]=$dump -join "`n"
             }
-            elseif($c[1] -eq 'test' -and $c -contains '-c') { if(-not $m.NotReady) { "8.4.11`t9032" } }
+            elseif($c[1] -eq 'test' -and $c -contains '-c') { throw 'Inline shell quoting regression in readiness probe.' }
+            elseif($c[1] -eq 'test' -and $c -contains '/tmp/loop-restore-ready.sh') {
+                Assert-Test ($m.Files['test:/tmp/loop-restore-ready.sh'].Contains('test "$(cat /proc/1/comm)" = mysqld')) 'PID 1 guard missing.'
+                Assert-Test (-not $m.Files['test:/tmp/loop-restore-ready.sh'].Contains("`r")) 'Ready runner is not LF.'
+                Assert-Test ($m.Files['test:/tmp/loop-restore-ready.sql'] -ceq "SELECT VERSION(),@@GLOBAL.server_id;`n") 'Readiness SQL changed.'
+                if($m.NotReady) { $global:LASTEXITCODE=1;return }
+                "8.4.11`t9032"
+            }
             elseif($c[1] -eq 'test' -and $c -contains '/tmp/loop-restore-file.sh') {
                 $sql=$m.Files['test:'+$c[-1]]
                 $m.Sql.Add([PSCustomObject]@{Id='test';Text=$sql})
@@ -90,6 +97,25 @@ function Expect-Failure([string]$Path,[string]$Action,[string]$Expected) {
 }
 function Read-State([string]$Path) { Get-Content (Join-Path $Path '.secrets/backups/mysql84/pc2/latest.json') -Raw | ConvertFrom-Json }
 try {
+    # A real native executable exercises PS 5.1 argument serialization that function mocks bypass.
+    $nativeProbe = Join-Path $testRoot 'argv-probe.exe'
+    Add-Type -TypeDefinition @'
+using System;
+using System.Text;
+public static class LoopNativeArgvProbe {
+    public static void Main(string[] args) {
+        foreach (string arg in args) Console.WriteLine(Convert.ToBase64String(Encoding.UTF8.GetBytes(arg)));
+    }
+}
+'@ -OutputAssembly $nativeProbe -OutputType ConsoleApplication
+    $oldReady = 'test "$(cat /proc/1/comm)" = mysqld && mysql --execute="SELECT VERSION(),@@GLOBAL.server_id;"'
+    $oldResult = @(& $nativeProbe $oldReady)
+    $oldReceived = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($oldResult[0]))
+    if ($PSVersionTable.PSVersion.Major -eq 5) { Assert-Test ($oldReceived -cne $oldReady -and -not $oldReceived.Contains('"SELECT VERSION()')) 'Expected legacy quote loss was not reproduced.' }
+    $newArguments = @('exec','test','sh','/tmp/loop-restore-ready.sh','/tmp/loop-restore-ready.sql')
+    $newResult = @(& $nativeProbe @newArguments | ForEach-Object { [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($_)) })
+    Assert-Test (($newResult -join "`n") -ceq ($newArguments -join "`n")) 'File-based readiness arguments did not survive native serialization.'
+    Write-Host 'PASS: real native argument probe reproduces legacy quote loss and validates file-based readiness arguments'
     $p=New-Case 'wrong-live';$global:BackupMock.Containers.live.Mounts[0].Name='preserved-original'
     Expect-Failure $p Backup 'source identity changed'
     Assert-Test ($global:BackupMock.Sql.Count -eq 0) 'Wrong source reached SQL.'
@@ -140,6 +166,14 @@ try {
         Expect-Failure $p RestoreTest $message
         $state=Read-State $p
         Assert-Test ($state.Stage -ne 'restore-verified' -and $global:BackupMock.Containers.live.State.Running) 'Failed drill claimed success or stopped live DB.'
+        if ($failure -eq 'NotReady') {
+            Assert-Test ($state.ReadyProbeExitCode -eq 1) 'Readiness failure code was discarded.'
+            $global:BackupMock.NotReady=$false
+            $before=@($global:BackupMock.Calls | Where-Object { $_[0] -in @('create','volume') }).Count
+            Run-Step $p RestoreTest
+            Assert-Test ((Read-State $p).Stage -eq 'restore-verified') 'Existing timed-out restore did not resume.'
+            Assert-Test (@($global:BackupMock.Calls | Where-Object { $_[0] -in @('create','volume') }).Count -eq $before) 'Timeout retry replaced container/volume.'
+        }
     }
     Write-Host 'PASS: initialization, restore, table-check and shutdown failures cannot claim recovery success'
 
