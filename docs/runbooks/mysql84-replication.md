@@ -23,7 +23,7 @@ Flask와 해당 DB에 쓰는 자동화를 잠시 중지한다. MySQL 컨테이�
 powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure/tools/mysql84-primary-export.ps1 -RepositoryPath C:/Users/user/telecom-security-project -Action Prepare
 ```
 
-현재 PC1 root 비밀번호를 **네 번** 입력한다. 순서는 원본 확인, TLS 갱신·계정 생성·쓰기 잠금, mysqldump, 쓰기 재개다. root 비밀번호를 파일에 보관하지 않는다. 복제 비밀번호는 난수로 생성하며 SQL 파일과 `.secrets` 안에 보관하고 명령 인수에 넣지 않는다.
+현재 PC1 root 비밀번호를 **네 번** 입력한다. 순서는 원본 확인, TLS 갱신·계정 생성·쓰기 잠금, mysqldump, 쓰기 재개다. root 비밀번호를 파일에 보관하지 않는다. 복제 비밀번호는 `SOURCE_PASSWORD` 제한에 맞춰 32자(접두사 4자 + 난수 14바이트의 28자리 hex)로 생성하며 SQL 파일과 `.secrets` 안에 보관하고 명령 인수에 넣지 않는다.
 
 도구는 다음 작업을 수행한다.
 
@@ -128,3 +128,26 @@ powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure
 PC2 도구 검증은 Windows PowerShell 5.1의 Docker 대역으로 진행한다. 전달 파일 변조, 잘못된/공유 볼륨, SQL 실패, 비정상 종료, 포트 충돌, 잘못된 복원 대상, TLS 실패, 빈 GTID, 재실행 차단, 성공 전 재시작 정책 차단을 검사한다. 실제 공용 PC2에서의 SQL 실행·통신 검증은 현장 실행 결과로 확인해야 한다.
 
 참고: [DB 복제 필터의 DDL 규칙](https://dev.mysql.com/doc/refman/8.4/en/replication-options-replica.html#option_mysqld_replicate-do-db), [복제 연결 상태 컬럼](https://dev.mysql.com/doc/refman/8.4/en/performance-schema-replication-connection-configuration-table.html).
+
+### ERROR 3056: 기존 68자 복제 비밀번호 수정
+
+이전 도구가 생성한 68자 비밀번호는 MySQL `CHANGE REPLICATION SOURCE TO ... SOURCE_PASSWORD`의 32자 제한 때문에 거부된다. `Restore`와 `Activate`가 PASS이고 `Start`에서 3056 오류가 난 경우 DB 복원·포트 전환은 완료된 상태다. `Prepare`·`Stage`·`Restore`·`Activate`를 다시 실행하지 않는다.
+
+1. **PC1**에서 수정된 `mysql84-primary-export.ps1`을 받고 아래 액션을 실행한다. 현재 PC1 root 비밀번호를 한 번 입력한다. 완료된 원본 번들 무결성, 실제 PC1 신원과 전용 인증서 계정을 검사한 뒤 복제 계정 비밀번호만 기존 난수의 앞 32자로 변경한다. 계정 변경은 세션의 바이너리 로깅을 꺼서 복제하지 않는다. TLS 로그인을 실제 검사한다.
+
+```powershell
+powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure/tools/mysql84-primary-export.ps1 -RepositoryPath C:/Users/user/telecom-security-project -Action FixReplicationPassword
+```
+
+2. **PC2**에서 수정된 `mysql84-replica.ps1`을 받고 `Start`, `Verify`만 차례로 실행한다. 각각 PC2 root 비밀번호를 입력한다. 수정 도구는 동일한 앞 32자를 사용하도록 TLS 접속 파일을 갱신하고 복제 채널에 적용한다. 실패 당시의 `replication-starting` 상태에서 재개할 수 있다.
+
+```powershell
+powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure/tools/mysql84-replica.ps1 -RepositoryPath C:/Users/user/telecom-security-project -Action Start
+powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure/tools/mysql84-replica.ps1 -RepositoryPath C:/Users/user/telecom-security-project -Action Verify
+```
+
+원본 전달 폴더의 비밀번호 파일은 기존 번들을 검증하는 시드로 유지한다. 기존 파일·스냅샷·인증서·manifest SHA256을 수정하거나 재전달하지 않는다. 구버전의 68자 파일을 직접 편집하면 무결성 검사가 실패한다. 앱 DB·앱 계정·root 비밀번호도 바꾸지 않는다. 새로 준비하는 번들은 처음부터 32자이므로 이 수정 액션이 필요 없다.
+
+검증에는 신규 비밀번호 길이/형식, 기존 68자 번들의 계정 수정과 해시 보존, 반복 수정, 계정 검사 실패, 변조 거부, MySQL의 32자 초과 거부를 모사하는 채널 검사, 기존 실패 단계에서 복원 없이 `Start` 재개가 포함된다. 실제 현장 연결 결과는 PC1 수정과 PC2 재개 후 확인한다.
+
+참고: [MySQL SOURCE_PASSWORD의 32자 제한](https://dev.mysql.com/doc/refman/8.4/en/change-replication-source-to.html).
