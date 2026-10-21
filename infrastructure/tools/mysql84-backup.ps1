@@ -241,16 +241,18 @@ DEALLOCATE PREPARE loop_guard_statement;
     $null = Invoke-BackupDocker @('exec', $state.TestId, 'sh', '/tmp/loop-restore-file.sh', '/tmp/loop-restore-snapshot.sql')
     $qualified = @($manifest.Tables | ForEach-Object { '`my_new_board_db`.`' + $_ + '`' })
     $check = $identityGuard + "`nCHECK TABLE " + ($qualified -join ',') + ";`n"
-    foreach ($table in $manifest.Tables) { $check += "SELECT CONCAT('loop_rows=$table',CHAR(9),COUNT(1)) FROM ``my_new_board_db``.``$table``;`n" }
+    # Batch mode escapes tabs inside a field. Emit two columns so mysql supplies the separator.
+    foreach ($table in $manifest.Tables) { $check += "SELECT 'loop_rows=$table',COUNT(1) FROM ``my_new_board_db``.``$table``;`n" }
     $checkFile = Join-Path $state.Directory 'restore-check.sql'
     Write-BackupText $checkFile $check
     $null = Invoke-BackupDocker @('cp', $checkFile, ($state.TestId + ':/tmp/loop-restore-check.sql'))
     $report = @(Invoke-BackupDocker @('exec', $state.TestId, 'sh', '/tmp/loop-restore-file.sh', '/tmp/loop-restore-check.sql'))
+    Write-BackupText (Join-Path $state.Directory 'restore-report.txt') ($report -join "`n")
     foreach ($table in $manifest.Tables) {
         $expected = 'my_new_board_db.' + $table + "`tcheck`tstatus`tOK"
-        if (@($report | Where-Object { $_ -ceq $expected }).Count -ne 1 -or @($report | Where-Object { $_ -cmatch ('^loop_rows=' + [regex]::Escape($table) + '\t[0-9]+$') }).Count -ne 1) { throw 'Restored table check or row count failed.' }
+        if (@($report | Where-Object { $_ -ceq $expected }).Count -ne 1) { throw ('Restored table check failed: ' + $table + '. Inspect the private restore-report.txt; no success was recorded.') }
+        if (@($report | Where-Object { $_ -cmatch ('^loop_rows=' + [regex]::Escape($table) + '\t[0-9]+$') }).Count -ne 1) { throw ('Restored row count failed: ' + $table + '. Inspect the private restore-report.txt; no success was recorded.') }
     }
-    Write-BackupText (Join-Path $state.Directory 'restore-report.txt') ($report -join "`n")
     Save-BackupState 'restore-checked'
 }
 catch { Save-BackupState 'restore-failed'; throw }
