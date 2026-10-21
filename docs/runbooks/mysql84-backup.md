@@ -164,6 +164,37 @@ exit;
 
 근거: [계정·권한 문장의 복제](https://dev.mysql.com/doc/refman/8.4/en/replication-features-mysqldb.html), [statement 형식의 기본 DB 필터](https://dev.mysql.com/doc/refman/8.4/en/replication-rules-db-options.html), [난수 비밀번호 생성](https://dev.mysql.com/doc/refman/8.4/en/create-user.html), [SHOW_ROUTINE으로 저장 루틴 백업](https://dev.mysql.com/doc/refman/8.4/en/privileges-provided.html#priv_show-routine).
 
+### 권한 명령 복사 시 백틱·별표 누락
+
+현장 입력에서 DB 이름의 백틱과 `*`가 누락되어 `Unknown command '\_'` 및 ERROR 1064가 발생했다. `GRANT SHOW_ROUTINE ON` 뒤의 `*.*`도 빠졌다. 뒤의 Performance Schema 권한 네 개는 Query OK였으므로 계정을 다시 만들거나 비밀번호를 변경하지 않는다. 경고 내용은 확인 전 정상·비정상으로 단정하지 않는다.
+
+PC1 root MySQL 콘솔에서 `USE my_new_board_db;`를 실행하고 `SELECT @@server_id, @@SESSION.sql_log_bin;`가 `1 / 1`인지 확인한다. 아래는 빠진 두 권한만 재적용하며 복사 과정에서 사라진 문자를 CHAR로 생성한다. 입력 코드에는 백틱·역슬래시·별표가 없다. 이전 확인의 partial_revokes=0 전제는 유지한다. PREPARE 또는 EXECUTE 오류가 나면 다음 문장을 중단한다.
+
+```sql
+SET @loop_target = CONCAT(QUOTE('loop_backup'), '@', QUOTE('localhost'));
+SET @loop_db = CONCAT(CHAR(96), REPLACE('my_new_board_db', '_', CONCAT(CHAR(92), '_')), CHAR(96));
+SET @loop_sql = CONCAT('GRANT SELECT, SHOW VIEW, TRIGGER, EVENT ON ', @loop_db, '.', CHAR(42), ' TO ', @loop_target);
+PREPARE loop_grant FROM @loop_sql;
+EXECUTE loop_grant;
+SHOW WARNINGS;
+DEALLOCATE PREPARE loop_grant;
+```
+
+첫 블록이 성공하면 이어서 실행한다.
+
+```sql
+SET @loop_sql = CONCAT('GRANT SHOW_ROUTINE ON ', CHAR(42), '.', CHAR(42), ' TO ', @loop_target);
+PREPARE loop_grant FROM @loop_sql;
+EXECUTE loop_grant;
+SHOW WARNINGS;
+DEALLOCATE PREPARE loop_grant;
+SHOW GRANTS FOR 'loop_backup'@'localhost';
+```
+
+위 두 블록의 SHOW WARNINGS는 바로 앞 EXECUTE의 경고를 확인한다. 기존 네 권한의 과거 경고를 복구하는 명령은 아니다. 권한 적용 후 PC2 root 콘솔에서 `SHOW GRANTS FOR 'loop_backup'@'localhost';`와 `SHOW REPLICA STATUS\G`를 확인하고 앞 절의 백업 계정 소켓 접속 시험을 진행한다. PC2 읽기 전용은 유지한다.
+
+근거: [MySQL의 GRANT 준비 문장 지원](https://dev.mysql.com/doc/refman/8.4/en/sql-prepared-statements.html), [DB 권한 이름의 밑줄 이스케이프](https://dev.mysql.com/doc/refman/8.4/en/grant.html).
+
 ## 준비 확인 120초 시간 초과
 
 초기 도구의 `sh -c` 준비 확인에는 중첩된 따옴표가 있었다. Windows PowerShell 5.1이 네이티브 명령에 인수를 전달할 때 이를 손실하는 문제를 실제 argv 검사 실행 파일로 재현했다. MySQL이 실행돼 있어도 SQL 전달 실패로 준비 판정이 나지 않을 수 있다. 수정본은 LF 형식의 `restore-ready.sh`와 `restore-ready.sql`을 시험 컨테이너에 복사하고 파일 경로만 전달한다. PID 1과 버전/server_id 검사는 유지한다.
