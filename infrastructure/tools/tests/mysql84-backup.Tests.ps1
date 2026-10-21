@@ -14,10 +14,14 @@ function New-Case([string]$Name) {
     $role=@{Stage='replica-ready';ProductionId='live';ImageId='sha256:fixed84';CloneVolume='live-data';SourceVolume='preserved-original';PrimaryUuid='98e409fb-a5c6-11f1-8bc1-9f1aa3e284ef'}
     [IO.File]::WriteAllText((Join-Path $rolePath 'state.json'),($role|ConvertTo-Json),$utf8)
     $live=[PSCustomObject]@{Id='live';Name='/mysql-lab';Image='sha256:fixed84';State=[PSCustomObject]@{Running=$true;ExitCode=0};Mounts=@([PSCustomObject]@{Type='volume';Name='live-data';Destination='/var/lib/mysql';RW=$true})}
-    $global:BackupMock=@{Containers=@{live=$live};Calls=[Collections.Generic.List[object]]::new();Sql=[Collections.Generic.List[object]]::new();Files=@{};Modes=@{};Shared=$false;GuardFailure=$false;DumpFailure=$false;Incomplete=$false;Gtid=$false;WrongHeaders=$false;UnsafeMount=$false;PublishedPort=$false;NotReady=$false;RestoreFailure=$false;CheckFailure=$false;BadStop=$false;BadClientMode=$false;EscapedRows=$false;DuplicateRows=$false;BadRowCount=$false}
+    $global:BackupMock=@{Containers=@{live=$live};Calls=[Collections.Generic.List[object]]::new();Sql=[Collections.Generic.List[object]]::new();Files=@{};Modes=@{};Shared=$false;GuardFailure=$false;DumpFailure=$false;Incomplete=$false;Gtid=$false;WrongHeaders=$false;UnsafeMount=$false;PublishedPort=$false;NotReady=$false;RestoreFailure=$false;CheckFailure=$false;BadStop=$false;BadClientMode=$false;EscapedRows=$false;DuplicateRows=$false;BadRowCount=$false;CredentialModeFailure=$false;CredentialCleanupFailure=$false}
     $path
 }
 function global:Start-Sleep { param($Seconds) }
+function global:Read-Host { param($Prompt, [switch]$AsSecureString)
+    Assert-Test ($AsSecureString -and $Prompt.Contains('loop_backup')) 'Unexpected credential prompt.'
+    ConvertTo-SecureString $global:BackupTestPassword -AsPlainText -Force
+}
 function global:docker {
     $c=@($args);$m=$global:BackupMock;$global:LASTEXITCODE=0;$m.Calls.Add($c)
     switch ($c[0]) {
@@ -32,10 +36,21 @@ function global:docker {
         }
         'cp' {
             if ($c[1] -like 'live:*') { [IO.File]::WriteAllText($c[2],$m.Files[$c[1]],$utf8) }
-            else { $m.Files[$c[2]]=[IO.File]::ReadAllText($c[1]) };return
+            else {
+                $m.Files[$c[2]]=[IO.File]::ReadAllText($c[1])
+                if ($c[1] -like '*client.cnf' -and $c[2] -like 'live:*') { $m['SavedConfig']=$m.Files[$c[2]] }
+            };return
         }
         'exec' {
-            if ($c[1] -eq 'test' -and $c[2] -eq 'cp') {
+            if ($c[1] -eq 'live' -and $c[2] -eq 'chmod') { $m.Modes['live:'+$c[-1]]=$c[3] }
+            elseif ($c[1] -eq 'live' -and $c[2] -eq 'stat') {
+                if ($m.CredentialModeFailure) { '777' } else { $m.Modes['live:'+$c[-1]] }
+            }
+            elseif ($c[1] -eq 'live' -and $c[2] -eq 'rm') {
+                if ($m.CredentialCleanupFailure) { $global:LASTEXITCODE=1;return }
+                $null=$m.Files.Remove('live:'+$c[-1])
+            }
+            elseif ($c[1] -eq 'test' -and $c[2] -eq 'cp') {
                 $m.Files['test:'+$c[4]]=$m.Files['test:'+$c[3]]
                 $m.Modes['test:'+$c[4]]=$m.Modes['test:'+$c[3]]
             }
@@ -46,7 +61,7 @@ function global:docker {
             elseif ($c[1] -eq 'test' -and $c[2] -eq 'stat') {
                 if ($m.BadClientMode) { '777' } else { $m.Modes['test:'+$c[-1]] }
             }
-            elseif ($c -contains '-it' -and $c -contains 'sh') {
+            elseif ($c -contains 'sh' -and ($c -contains '-it' -or $c[1] -eq 'live')) {
                 $sql=$m.Files['live:'+$c[-2]]
                 $m.Sql.Add([PSCustomObject]@{Id='live';Text=$sql})
                 if($m.GuardFailure) { $global:LASTEXITCODE=1;return }
@@ -153,6 +168,66 @@ public static class LoopNativeArgvProbe {
     Assert-Test (@($global:BackupMock.Calls | Where-Object { $_ -contains 'mysqldump' }).Count -eq 0) 'Unhealthy source was dumped.'
     Write-Host 'PASS: wrong/shared live source and failed health guard rejected'
 
+    $global:BackupTestPassword = 'Lp9!pa\ss" #;\s' + "`t`r`n" + ([string][char]0xD55C)
+    $p=New-Case 'saved-credential'
+    Run-Step $p SaveCredential
+    $credentialPath=Join-Path $p '.secrets/backups/mysql84/pc2/credentials/loop_backup.clixml'
+    $encrypted=[IO.File]::ReadAllText($credentialPath)
+    Assert-Test (-not $encrypted.Contains($global:BackupTestPassword) -and $encrypted.Contains('SS')) 'Credential is not DPAPI serialized.'
+    $roundTrip=Import-Clixml -LiteralPath $credentialPath
+    Assert-Test ($roundTrip.UserName -ceq 'loop_backup' -and $roundTrip.GetNetworkCredential().Password -ceq $global:BackupTestPassword) 'DPAPI round trip failed.'
+    $credentialAcl=Get-Acl -LiteralPath (Split-Path $credentialPath -Parent)
+    Assert-Test ($credentialAcl.AreAccessRulesProtected -and $credentialAcl.Access.Count -eq 2) 'Credential directory has inherited/extra access.'
+    Expect-Failure $p SaveCredential 'already exists'
+    Run-Step $p BackupSaved
+    $savedState=Read-State $p
+    Assert-Test ($savedState.Stage -eq 'backup-ready') 'Saved credential backup failed.'
+    Assert-Test (@($global:BackupMock.Calls | Where-Object { $_ -contains '-it' -or $_ -contains '--password' -or $_ -contains '--user=root' }).Count -eq 0) 'Saved backup fell back to interactive/root authentication.'
+    $configCopy=@($global:BackupMock.Calls | Where-Object { $_[0] -eq 'cp' -and $_[1] -like '*client.cnf' })[0]
+    Assert-Test (-not (Test-Path -LiteralPath $configCopy[1])) 'Host plaintext credential was retained.'
+    $expectedPassword = 'password="Lp9!pa\\ss\" #;\\s\t\r\n' + ([string][char]0xD55C) + '"'
+    Assert-Test ($global:BackupMock.SavedConfig.Contains($expectedPassword)) 'Option-file escaping changed the password.'
+    Assert-Test (-not $global:BackupMock.Files.ContainsKey($configCopy[2])) 'Container credential was retained.'
+    Assert-Test (@(Get-ChildItem -LiteralPath (Split-Path $credentialPath -Parent) -Directory -Filter 'runtime-*').Count -eq 0) 'Plaintext runtime directory retained.'
+    $savedRunner=$global:BackupMock.Files['live:'+$savedState.TempDirectory+'/root-file.sh']
+    Assert-Test ($savedRunner.Contains('--defaults-file=') -and $savedRunner.Contains('--no-login-paths') -and $savedRunner.Contains('--protocol=SOCKET') -and $savedRunner.Contains('--user=loop_backup')) 'Saved preflight auth options missing.'
+    Assert-Test (-not (($global:BackupMock.Calls | ForEach-Object { $_ -join ' ' }) -join "`n").Contains($global:BackupTestPassword)) 'Saved credential leaked into process arguments.'
+    # The same data-recovery manifest remains compatible with the existing isolated restore path.
+    Run-Step $p RestoreTest
+    Assert-Test ((Read-State $p).Stage -eq 'restore-verified') 'Saved backup cannot use existing restore verification.'
+    Write-Host 'PASS: real Windows DPAPI/ACL round trip, noninteractive least-privilege backup, credential cleanup and restore compatibility'
+
+    $p=New-Case 'missing-credential'
+    Expect-Failure $p BackupSaved 'Cannot load loop_backup'
+    Assert-Test ($global:BackupMock.Sql.Count -eq 0 -and -not (Test-Path (Join-Path $p '.secrets/backups/mysql84/pc2/latest.json'))) 'Missing credential reached SQL/overwrote backup state.'
+    $p=New-Case 'wrong-credential';Run-Step $p SaveCredential
+    $credentialPath=Join-Path $p '.secrets/backups/mysql84/pc2/credentials/loop_backup.clixml'
+    [Management.Automation.PSCredential]::new('root',(ConvertTo-SecureString 'fixture' -AsPlainText -Force)) | Export-Clixml -LiteralPath $credentialPath
+    Expect-Failure $p BackupSaved 'Cannot load loop_backup'
+    Assert-Test ($global:BackupMock.Sql.Count -eq 0) 'Root credential reached SQL.'
+    [IO.File]::WriteAllText($credentialPath,'<invalid>')
+    Expect-Failure $p BackupSaved 'Cannot load loop_backup'
+    foreach ($failure in @('CredentialModeFailure','GuardFailure','DumpFailure','CredentialCleanupFailure')) {
+        $p=New-Case ('saved-'+$failure);Run-Step $p SaveCredential;$global:BackupMock[$failure]=$true
+        $expected='Docker exec failed'
+        if ($failure -eq 'CredentialModeFailure') { $expected='must have mode 600' }
+        if ($failure -eq 'CredentialCleanupFailure') { $expected='credential cleanup failed' }
+        Expect-Failure $p BackupSaved $expected
+        Assert-Test ((Read-State $p).Stage -eq 'backup-failed') 'Failed saved backup claimed success.'
+        if ($failure -ne 'CredentialCleanupFailure') {
+            Assert-Test (@($global:BackupMock.Files.Keys | Where-Object { $_ -like 'live:*/client.cnf' }).Count -eq 0) 'Failure retained container credential.'
+        }
+        Assert-Test (@(Get-ChildItem -LiteralPath (Join-Path $p '.secrets/backups/mysql84/pc2/credentials') -Recurse -Filter 'client.cnf').Count -eq 0) 'Failure retained host plaintext credential.'
+        Assert-Test (@($global:BackupMock.Calls | Where-Object { $_ -contains '-it' -or $_ -contains '--password' }).Count -eq 0) 'Failure prompted for credentials.'
+    }
+    $p=New-Case 'overlapping-operation'
+    $lockDirectory=Join-Path $p '.secrets/backups/mysql84/pc2'
+    $null=New-Item -ItemType Directory -Path $lockDirectory -Force
+    $held=[IO.File]::Open((Join-Path $lockDirectory 'operation.lock'),'OpenOrCreate','ReadWrite','None')
+    try { Expect-Failure $p Backup 'Another backup' } finally { $held.Dispose() }
+    Assert-Test ($global:BackupMock.Calls.Count -eq 0) 'Overlapping operation reached Docker.'
+    Write-Host 'PASS: missing/corrupt/root credentials, auth/mode/dump/cleanup failures and overlapping operations rejected'
+
     foreach($failure in @('DumpFailure','Incomplete','WrongHeaders','Gtid')) {
         $p=New-Case $failure;$global:BackupMock[$failure]=$true
         $message='incomplete';if($failure -eq 'DumpFailure') { $message='Docker exec failed' }
@@ -231,7 +306,9 @@ public static class LoopNativeArgvProbe {
 finally {
     Remove-Item Function:\docker -ErrorAction SilentlyContinue
     Remove-Item Function:\Start-Sleep -ErrorAction SilentlyContinue
+    Remove-Item Function:\Read-Host -ErrorAction SilentlyContinue
     Remove-Variable BackupMock -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable BackupTestPassword -Scope Global -ErrorAction SilentlyContinue
     $resolved=[IO.Path]::GetFullPath($testRoot)
     $temp=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar
     if(-not $resolved.StartsWith($temp,[StringComparison]::OrdinalIgnoreCase) -or (Split-Path $resolved -Leaf) -notlike 'loop-backup-tests-*') { throw 'Unsafe temporary cleanup target.' }

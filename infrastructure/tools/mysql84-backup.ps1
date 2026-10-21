@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$RepositoryPath,
-    [ValidateSet('Backup', 'RestoreTest', 'Status')][string]$Action = 'Status'
+    [ValidateSet('SaveCredential', 'BackupSaved', 'Backup', 'RestoreTest', 'Status')][string]$Action = 'Status'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -9,6 +9,8 @@ if ([string]::IsNullOrWhiteSpace($RepositoryPath)) { $RepositoryPath = Join-Path
 $repo = (Resolve-Path -LiteralPath $RepositoryPath).Path
 $root = Join-Path $repo '.secrets/backups/mysql84/pc2'
 $latest = Join-Path $root 'latest.json'
+$credentialDirectory = Join-Path $root 'credentials'
+$credentialFile = Join-Path $credentialDirectory 'loop_backup.clixml'
 $utf8 = [Text.UTF8Encoding]::new($false)
 $pc2Uuid = 'f1868a2a-a5a5-11f1-8815-9693e922f083'
 $testArguments = @('--server-id=9032', '--event-scheduler=OFF', '--skip-replica-start=ON', '--innodb-buffer-pool-size=128M')
@@ -30,6 +32,54 @@ function Invoke-BackupDocker([string[]]$Arguments, [switch]$AllowFailure) {
     foreach ($line in $lines) { $line.ToString() }
 }
 function Write-BackupText([string]$Path, [string]$Text) { [IO.File]::WriteAllText($Path, ($Text -replace "`r`n", "`n"), $utf8) }
+function New-PrivateBackupDirectory([string]$Path) {
+    if ($env:OS -ne 'Windows_NT') { throw 'Saved backup credentials require Windows DPAPI.' }
+    $null = New-Item -ItemType Directory -Path $Path -Force
+    if (((Get-Item -LiteralPath $Path).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Credential directory cannot be a reparse point.' }
+    $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    $acl = Get-Acl -LiteralPath $Path
+    $acl.SetOwner($sid)
+    $acl.SetAccessRuleProtection($true, $false)
+    foreach ($rule in @($acl.Access)) { $acl.RemoveAccessRuleSpecific($rule) }
+    foreach ($identity in @($sid, [Security.Principal.SecurityIdentifier]::new('S-1-5-18'))) {
+        $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($identity, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow'))
+    }
+    Set-Acl -LiteralPath $Path -AclObject $acl
+}
+function Read-SavedBackupCredential {
+    if ($env:OS -ne 'Windows_NT') { throw 'Saved backup credentials require Windows DPAPI.' }
+    try {
+        $item = Get-Item -LiteralPath $credentialFile
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Invalid credential file.' }
+        $credential = Import-Clixml -LiteralPath $credentialFile
+        if ($credential -isnot [Management.Automation.PSCredential] -or $credential.UserName -cne 'loop_backup' -or $credential.Password.Length -eq 0) { throw 'Invalid credential account.' }
+        $credential
+    }
+    catch { throw 'Cannot load loop_backup credential. Run SaveCredential once on PC2 as this Windows user; never store root credentials.' }
+}
+function Initialize-BackupClient($Credential) {
+    $runtime = Join-Path $credentialDirectory ('runtime-' + [guid]::NewGuid().ToString('N'))
+    $hostConfig = Join-Path $runtime 'client.cnf'
+    $client = $state.TempDirectory + '/client.cnf'
+    New-PrivateBackupDirectory $runtime
+    try {
+        # Quote option-file values, including MySQL-generated punctuation and escape characters.
+        $plain = $Credential.GetNetworkCredential().Password
+        $escaped = $plain.Replace('\', '\\').Replace('"', '\"').Replace("`r", '\r').Replace("`n", '\n').Replace("`t", '\t').Replace("`b", '\b')
+        $config = "[client]`nuser=loop_backup`nprotocol=SOCKET`npassword=`"$escaped`"`n"
+        Write-BackupText $hostConfig $config
+        $null = Invoke-BackupDocker @('cp', $hostConfig, ($state.SourceId + ':' + $client))
+        $null = Invoke-BackupDocker @('exec', $state.SourceId, 'chmod', '600', $client)
+        $mode = @(Invoke-BackupDocker @('exec', $state.SourceId, 'stat', '-c', '%a', $client))
+        if ($mode.Count -ne 1 -or $mode[0] -cne '600') { throw 'Container-local backup client config must have mode 600.' }
+    }
+    finally {
+        $plain = $null; $escaped = $null; $config = $null
+        if (Test-Path -LiteralPath $hostConfig) { Remove-Item -LiteralPath $hostConfig -Force }
+        Remove-Item -LiteralPath $runtime -Force
+    }
+    $client
+}
 function Save-BackupState([string]$Stage) {
     $state.Stage = $Stage
     Write-BackupText $latest ($state | ConvertTo-Json -Depth 8)
@@ -86,9 +136,31 @@ if ($Action -eq 'Status') {
     if ($state.TestId) { Invoke-BackupDocker @('inspect', '--format', 'name={{.Name}} status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} error={{json .State.Error}}', $state.TestId) }
     exit 0
 }
+$null = New-Item -ItemType Directory -Path $root -Force
+try { $operationLock = [IO.File]::Open((Join-Path $root 'operation.lock'), 'OpenOrCreate', 'ReadWrite', 'None') }
+catch { throw 'Another backup, credential setup or restore test is running. No action was started.' }
+try {
 $sourceInfo = Get-BackupSource
 
-if ($Action -eq 'Backup') {
+if ($Action -eq 'SaveCredential') {
+    if (Test-Path -LiteralPath $credentialFile) { throw 'A credential already exists. Use BackupSaved to verify it; this action will not replace it.' }
+    New-PrivateBackupDirectory $credentialDirectory
+    $secure = Read-Host 'Enter the loop_backup password generated on PC1 (not the root password)' -AsSecureString
+    try {
+        if ($secure.Length -eq 0) { throw 'Backup password cannot be empty.' }
+        $credential = [Management.Automation.PSCredential]::new('loop_backup', $secure)
+        $credential | Export-Clixml -LiteralPath $credentialFile -NoClobber
+        $null = Read-SavedBackupCredential
+    }
+    finally { $credential = $null; if ($null -ne $secure) { $secure.Dispose() } }
+    Write-Host 'PASS: loop_backup credential encrypted for this Windows user on this PC. Next run BackupSaved to verify authentication and create a backup.'
+    exit 0
+}
+
+if ($Action -in @('Backup', 'BackupSaved')) {
+    $saved = $Action -eq 'BackupSaved'
+    $savedCredential = $null
+    if ($saved) { $savedCredential = Read-SavedBackupCredential }
     if (Test-Path -LiteralPath $latest) {
         $previous = Get-Content -LiteralPath $latest -Raw | ConvertFrom-Json
         if ($previous.Stage -in @('test-created', 'test-running', 'restoring', 'restore-checked')) { throw 'Finish or inspect the pending restore test before starting another backup.' }
@@ -103,6 +175,7 @@ if ($Action -eq 'Backup') {
         TestId=''; ManifestSha256=''
     }
     Save-BackupState 'backup-started'
+    try {
     $primaryUuid = $sourceInfo.Role.PrimaryUuid
     $preflight = @"
 SET @loop_guard = IF(VERSION()='8.4.11' AND @@GLOBAL.server_id=2
@@ -122,14 +195,21 @@ SELECT CONCAT('loop_table=',HEX(TABLE_NAME)) FROM information_schema.TABLES
 WHERE TABLE_SCHEMA='my_new_board_db' AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME;
 "@
     $runner = Join-Path $directory 'root-file.sh'
-    Write-BackupText $runner "#!/bin/sh`nset -eu`nmysql --user=root --password --batch --skip-column-names < `"`$1`" > `"`$2`"`n"
     $sqlFile = Join-Path $directory 'preflight.sql'
     Write-BackupText $sqlFile $preflight
     $null = Invoke-BackupDocker @('exec', $state.SourceId, 'mkdir', '-p', '-m', '700', $state.TempDirectory)
+    $auth = @('--user=root', '--password')
+    $execArguments = @('exec', '-it', $state.SourceId)
+    if ($saved) {
+        $clientFile = Initialize-BackupClient $savedCredential
+        $auth = @(('--defaults-file=' + $clientFile), '--no-login-paths', '--protocol=SOCKET', '--user=loop_backup')
+        $execArguments = @('exec', $state.SourceId)
+    }
+    Write-BackupText $runner ("#!/bin/sh`nset -eu`nmysql " + ($auth -join ' ') + " --batch --skip-column-names < `"`$1`" > `"`$2`"`n")
     $null = Invoke-BackupDocker @('cp', $runner, ($state.SourceId + ':' + $state.TempDirectory + '/root-file.sh'))
     $null = Invoke-BackupDocker @('cp', $sqlFile, ($state.SourceId + ':' + $state.TempDirectory + '/preflight.sql'))
-    Write-Host 'Enter CURRENT PC2 root password for backup preflight (first prompt).'
-    Invoke-BackupDocker @('exec', '-it', $state.SourceId, 'sh', ($state.TempDirectory + '/root-file.sh'), ($state.TempDirectory + '/preflight.sql'), ($state.TempDirectory + '/preflight.txt'))
+    if (-not $saved) { Write-Host 'Enter CURRENT PC2 root password for backup preflight (first prompt).' }
+    Invoke-BackupDocker ($execArguments + @('sh', ($state.TempDirectory + '/root-file.sh'), ($state.TempDirectory + '/preflight.sql'), ($state.TempDirectory + '/preflight.txt')))
     $metadata = Join-Path $directory 'preflight.txt'
     $null = Invoke-BackupDocker @('cp', ($state.SourceId + ':' + $state.TempDirectory + '/preflight.txt'), $metadata)
     $tables = @(foreach ($line in [IO.File]::ReadAllLines($metadata)) {
@@ -144,8 +224,8 @@ WHERE TABLE_SCHEMA='my_new_board_db' AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_
         }
     })
     if ($tables.Count -eq 0 -or @($tables | Select-Object -Unique).Count -ne $tables.Count) { throw 'Preflight did not return unique base tables.' }
-    Write-Host 'Enter SAME PC2 root password for mysqldump (second prompt). Do not run schema migrations during this dump.'
-    Invoke-BackupDocker @('exec', '-it', $state.SourceId, 'mysqldump', '--user=root', '--password', '--default-character-set=utf8mb4', '--single-transaction', '--quick', '--skip-lock-tables', '--no-tablespaces', '--routines', '--events', '--triggers', '--hex-blob', '--set-gtid-purged=OFF', ('--result-file=' + $state.TempDirectory + '/snapshot.sql'), '--databases', 'my_new_board_db')
+    if (-not $saved) { Write-Host 'Enter SAME PC2 root password for mysqldump (second prompt). Do not run schema migrations during this dump.' }
+    Invoke-BackupDocker ($execArguments + @('mysqldump') + $auth + @('--default-character-set=utf8mb4', '--single-transaction', '--quick', '--skip-lock-tables', '--no-tablespaces', '--routines', '--events', '--triggers', '--hex-blob', '--set-gtid-purged=OFF', ('--result-file=' + $state.TempDirectory + '/snapshot.sql'), '--databases', 'my_new_board_db'))
     $partial = Join-Path $directory 'snapshot.sql.partial'
     $null = Invoke-BackupDocker @('cp', ($state.SourceId + ':' + $state.TempDirectory + '/snapshot.sql'), $partial)
     $headers = @(Select-String -LiteralPath $partial -Pattern '^-- Table structure for table `([A-Za-z0-9_]+)`$' | ForEach-Object { $_.Matches[0].Groups[1].Value })
@@ -156,6 +236,15 @@ WHERE TABLE_SCHEMA='my_new_board_db' AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_
     $manifestFile = Join-Path $directory 'manifest.json'
     Write-BackupText $manifestFile ($manifest | ConvertTo-Json -Depth 6)
     $state.ManifestSha256 = (Get-FileHash $manifestFile).Hash
+    }
+    catch { Save-BackupState 'backup-failed'; throw }
+    finally {
+        $savedCredential = $null
+        if ($saved) {
+            $null = Invoke-BackupDocker -Arguments @('exec', $state.SourceId, 'rm', '-f', ($state.TempDirectory + '/client.cnf')) -AllowFailure
+            if ($script:BackupDockerExitCode -ne 0) { Save-BackupState 'backup-failed'; throw 'Backup credential cleanup failed. No success was recorded; inspect the private client.cnf path in the backup state.' }
+        }
+    }
     Save-BackupState 'backup-ready'
     Write-Host ('PASS: backup saved; ' + $tables.Count + ' base tables, SHA256 and completion marker checked.')
     Write-Host ('Backup directory: ' + $directory)
@@ -269,3 +358,5 @@ Save-BackupState 'restore-verified'
 Write-Host ('PASS: isolated restore verified; ' + @($manifest.Tables).Count + ' tables CHECK TABLE OK; row counts saved.')
 foreach ($line in $report) { if ($line -clike 'loop_rows=*') { Write-Host $line } }
 Write-Host 'Only the isolated test container was stopped. Live replica, replication and original volumes were retained.'
+}
+finally { $operationLock.Dispose() }
