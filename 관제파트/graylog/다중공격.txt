@@ -1,0 +1,63 @@
+
+# ED-05 동일 IP 다중 공격 상관분석 테스트
+# GELF UDP Input: localhost:12201
+# 실제 공격 없이 모의 로그만 전송
+
+$GRAYLOG_HOST = "127.0.0.1"
+$GRAYLOG_PORT = 12201
+$TEST_IP = "203.0.113.90"
+
+$testCases = @(
+    @{
+        rule = "login-bruteforce"
+        count = 6
+        message = "Simulated brute-force login failure"
+    },
+    @{
+        rule = "portscan"
+        count = 6
+        message = "Simulated network port scanning"
+    }
+)
+
+$udp = New-Object System.Net.Sockets.UdpClient
+
+try {
+    foreach ($test in $testCases) {
+        for ($i = 1; $i -le $test.count; $i++) {
+
+            $log = @{
+                version = "1.1"
+                host = "correlation-security-test"
+                short_message = "$($test.message) #$i"
+                level = 4
+
+                _rule = $test.rule
+                _src_ip = $TEST_IP
+                _username = "correlation_test"
+                _student = "security-team"
+                _test_source = "ed05-powershell-lab"
+            } | ConvertTo-Json -Compress
+
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($log)
+
+            [void]$udp.Send(
+                $bytes,
+                $bytes.Length,
+                $GRAYLOG_HOST,
+                $GRAYLOG_PORT
+            )
+
+            Write-Host "[$($test.rule)] $i/$($test.count)"
+            Start-Sleep -Milliseconds 200
+        }
+    }
+}
+finally {
+    $udp.Close()
+}
+
+Write-Host ""
+Write-Host "ED-05 종합 테스트 로그 12건 전송 완료"
+Write-Host "IP: $TEST_IP"
+Write-Host "공격 유형: login-bruteforce + portscan"
