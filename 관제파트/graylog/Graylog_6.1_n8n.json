@@ -1,0 +1,1241 @@
+{
+  "v": 1,
+  "id": "a14f48aa-b53d-4e76-9e97-8093b958927a",
+  "rev": 1,
+  "name": "n8n 연동 이벤트 규칙 7종 (Graylog 6.1, Stream 참조 수정)",
+  "summary": "기존 Content Pack의 ED-07 Wazuh 외부 Stream 참조 제거; 설치 검증용, 규칙은 비활성화",
+  "description": "수업용 Graylog 6.1 Content Pack의 구조를 참고. 수집 필드 및 Notification Body template 값 검증 후 운영 적용.",
+  "vendor": "Security Lab",
+  "url": "",
+  "parameters": [],
+  "entities": [
+    {
+      "v": "1",
+      "type": {
+        "name": "notification",
+        "version": "1"
+      },
+      "id": "990d0a45-fb45-4ff6-a72a-c07e5e7e64fe",
+      "data": {
+        "title": {
+          "@type": "string",
+          "@value": "N8N-01 | RBAC/관리자 권한 감사"
+        },
+        "description": {
+          "@type": "string",
+          "@value": "Graylog 6.1 → n8n. 실제 수집 필드와 템플릿 변환 검증 후 사용."
+        },
+        "config": {
+          "type": "http-notification-v2",
+          "url": {
+            "@type": "string",
+            "@value": "http://host.docker.internal:5678/webhook/priv-guard"
+          },
+          "skip_tls_verification": {
+            "@type": "boolean",
+            "@value": false
+          },
+          "method": {
+            "@type": "string",
+            "@value": "POST"
+          },
+          "time_zone": {
+            "@type": "string",
+            "@value": "Asia/Seoul"
+          },
+          "content_type": {
+            "@type": "string",
+            "@value": "JSON"
+          },
+          "headers": {
+            "@type": "string",
+            "@value": ""
+          },
+          "body_template": {
+            "@type": "string",
+            "@value": "{\n  \"student\": \"security-team\",\n  \"alerts\": [\n    {\n      \"level\": 12,\n      \"ip\": \"${event.fields.src_ip}\",\n      \"rule\": \"priv-unauthorized-admin\"\n    }\n  ]\n}"
+          }
+        }
+      },
+      "constraints": [
+        {
+          "type": "server-version",
+          "version": ">=6.1.16+4a05695"
+        }
+      ]
+    },
+    {
+      "v": "1",
+      "type": {
+        "name": "event_definition",
+        "version": "1"
+      },
+      "id": "4f43571b-e073-48f0-84e6-f7f4cf21c34f",
+      "data": {
+        "field_spec": {
+          "src_ip": {
+            "data_type": "string",
+            "providers": [
+              {
+                "type": "template-v1",
+                "template": "${source.src_ip}",
+                "require_values": false
+              }
+            ]
+          }
+        },
+        "config": {
+          "query_parameters": [],
+          "search_within_ms": 60000,
+          "query": {
+            "@type": "string",
+            "@value": "rule:priv-unauthorized-admin"
+          },
+          "cron_expression": null,
+          "cron_timezone": null,
+          "use_cron_scheduling": false,
+          "streams": [],
+          "execute_every_ms": 60000,
+          "event_limit": 100,
+          "group_by": [],
+          "series": [],
+          "conditions": {
+            "expression": null
+          },
+          "type": "aggregation-v1",
+          "stream_categories": [],
+          "filters": []
+        },
+        "priority": {
+          "@type": "integer",
+          "@value": 2
+        },
+        "notifications": [
+          {
+            "notification_id": {
+              "@type": "string",
+              "@value": "990d0a45-fb45-4ff6-a72a-c07e5e7e64fe"
+            },
+            "notification_parameters": null
+          }
+        ],
+        "remediation_steps": null,
+        "matched_at": null,
+        "_scope": {
+          "@type": "string",
+          "@value": "DEFAULT"
+        },
+        "notification_settings": {
+          "grace_period_ms": 300000,
+          "backlog_size": 1
+        },
+        "updated_at": null,
+        "title": {
+          "@type": "string",
+          "@value": "ED-01 | RBAC/관리자 권한 감사"
+        },
+        "is_scheduled": {
+          "@type": "boolean",
+          "@value": false
+        },
+        "key_spec": [],
+        "storage": [
+          {
+            "type": "persist-to-streams-v1",
+            "streams": [
+              "000000000000000000000002"
+            ]
+          }
+        ],
+        "alert": {
+          "@type": "boolean",
+          "@value": true
+        },
+        "description": {
+          "@type": "string",
+          "@value": "레벨 12는 임시 고정값. 현 n8n은 RBAC 회수가 아닌 level 판정. 자동 회수 미연결."
+        }
+      },
+      "constraints": [
+        {
+          "type": "server-version",
+          "version": ">=6.1.16+4a05695"
+        }
+      ]
+    },
+    {
+      "v": "1",
+      "type": {
+        "name": "notification",
+        "version": "1"
+      },
+      "id": "970ec7a7-699b-4e65-a07e-fca21a69b480",
+      "data": {
+        "title": {
+          "@type": "string",
+          "@value": "N8N-04 | 동일 IP 브루트포스"
+        },
+        "description": {
+          "@type": "string",
+          "@value": "Graylog 6.1 → n8n. 실제 수집 필드와 템플릿 변환 검증 후 사용."
+        },
+        "config": {
+          "type": "http-notification-v2",
+          "url": {
+            "@type": "string",
+            "@value": "http://host.docker.internal:5678/webhook/ip-block"
+          },
+          "skip_tls_verification": {
+            "@type": "boolean",
+            "@value": false
+          },
+          "method": {
+            "@type": "string",
+            "@value": "POST"
+          },
+          "time_zone": {
+            "@type": "string",
+            "@value": "Asia/Seoul"
+          },
+          "content_type": {
+            "@type": "string",
+            "@value": "JSON"
+          },
+          "headers": {
+            "@type": "string",
+            "@value": ""
+          },
+          "body_template": {
+            "@type": "string",
+            "@value": "{\n  \"alerts\": [\n    {\n      \"src_ip\": \"${event.fields.src_ip}\",\n      \"count\": \"${event.aggregation_conditions.count}\",\n      \"student\": \"security-team\"\n    }\n  ]\n}"
+          }
+        }
+      },
+      "constraints": [
+        {
+          "type": "server-version",
+          "version": ">=6.1.16+4a05695"
+        }
+      ]
+    },
+    {
+      "v": "1",
+      "type": {
+        "name": "event_definition",
+        "version": "1"
+      },
+      "id": "b0d55294-8fa3-47c6-a887-6ce72705d14a",
+      "data": {
+        "field_spec": {
+          "src_ip": {
+            "data_type": "string",
+            "providers": [
+              {
+                "type": "template-v1",
+                "template": "${source.src_ip}",
+                "require_values": false
+              }
+            ]
+          }
+        },
+        "config": {
+          "query_parameters": [],
+          "search_within_ms": 300000,
+          "query": {
+            "@type": "string",
+            "@value": "rule:login-bruteforce AND src_ip:*"
+          },
+          "cron_expression": null,
+          "cron_timezone": null,
+          "use_cron_scheduling": false,
+          "streams": [],
+          "execute_every_ms": 60000,
+          "event_limit": 100,
+          "group_by": [
+            "src_ip"
+          ],
+          "series": [
+            {
+              "type": "count",
+              "id": "count-",
+              "field": null
+            }
+          ],
+          "conditions": {
+            "expression": {
+              "expr": ">=",
+              "left": {
+                "expr": "number-ref",
+                "ref": "count-"
+              },
+              "right": {
+                "expr": "number",
+                "value": 10
+              }
+            }
+          },
+          "type": "aggregation-v1",
+          "stream_categories": [],
+          "filters": []
+        },
+        "priority": {
+          "@type": "integer",
+          "@value": 2
+        },
+        "notifications": [
+          {
+            "notification_id": {
+              "@type": "string",
+              "@value": "970ec7a7-699b-4e65-a07e-fca21a69b480"
+            },
+            "notification_parameters": null
+          }
+        ],
+        "remediation_steps": null,
+        "matched_at": null,
+        "_scope": {
+          "@type": "string",
+          "@value": "DEFAULT"
+        },
+        "notification_settings": {
+          "grace_period_ms": 300000,
+          "backlog_size": 1
+        },
+        "updated_at": null,
+        "title": {
+          "@type": "string",
+          "@value": "ED-04 | 동일 IP 브루트포스"
+        },
+        "is_scheduled": {
+          "@type": "boolean",
+          "@value": false
+        },
+        "key_spec": [
+          "src_ip"
+        ],
+        "storage": [
+          {
+            "type": "persist-to-streams-v1",
+            "streams": [
+              "000000000000000000000002"
+            ]
+          }
+        ],
+        "alert": {
+          "@type": "boolean",
+          "@value": true
+        },
+        "description": {
+          "@type": "string",
+          "@value": "동일 IP 5분 10회 이상. count 템플릿 확인 필수. 자체 n8n 임계치 검증 없음."
+        }
+      },
+      "constraints": [
+        {
+          "type": "server-version",
+          "version": ">=6.1.16+4a05695"
+        }
+      ]
+    },
+    {
+      "v": "1",
+      "type": {
+        "name": "notification",
+        "version": "1"
+      },
+      "id": "acd6f476-321f-47c0-a889-60b82ffe2b72",
+      "data": {
+        "title": {
+          "@type": "string",
+          "@value": "N8N-05 | 동일 IP 다중 공격 상관"
+        },
+        "description": {
+          "@type": "string",
+          "@value": "Graylog 6.1 → n8n. 실제 수집 필드와 템플릿 변환 검증 후 사용."
+        },
+        "config": {
+          "type": "http-notification-v2",
+          "url": {
+            "@type": "string",
+            "@value": "http://host.docker.internal:5678/webhook/security-alert"
+          },
+          "skip_tls_verification": {
+            "@type": "boolean",
+            "@value": false
+          },
+          "method": {
+            "@type": "string",
+            "@value": "POST"
+          },
+          "time_zone": {
+            "@type": "string",
+            "@value": "Asia/Seoul"
+          },
+          "content_type": {
+            "@type": "string",
+            "@value": "JSON"
+          },
+          "headers": {
+            "@type": "string",
+            "@value": ""
+          },
+          "body_template": {
+            "@type": "string",
+            "@value": "{\n  \"alerts\": [\n    {\n      \"src_ip\": \"${event.fields.src_ip}\",\n      \"rule\": \"네트워크+인증 복합공격 상관 탐지\",\n      \"kind\": \"correlation\",\n      \"decision\": \"alert\",\n      \"student\": \"security-team\"\n    }\n  ]\n}"
+          }
+        }
+      },
+      "constraints": [
+        {
+          "type": "server-version",
+          "version": ">=6.1.16+4a05695"
+        }
+      ]
+    },
+    {
+      "v": "1",
+      "type": {
+        "name": "event_definition",
+        "version": "1"
+      },
+      "id": "fd8f9fea-af19-419f-aa2a-636b6f7653c4",
+      "data": {
+        "field_spec": {
+          "src_ip": {
+            "data_type": "string",
+            "providers": [
+              {
+                "type": "template-v1",
+                "template": "${source.src_ip}",
+                "require_values": false
+              }
+            ]
+          }
+        },
+        "config": {
+          "query_parameters": [],
+          "search_within_ms": 120000,
+          "query": {
+            "@type": "string",
+            "@value": "(rule:login-bruteforce OR rule:portscan) AND src_ip:*"
+          },
+          "cron_expression": null,
+          "cron_timezone": null,
+          "use_cron_scheduling": false,
+          "streams": [],
+          "execute_every_ms": 30000,
+          "event_limit": 100,
+          "group_by": [
+            "src_ip"
+          ],
+          "series": [
+            {
+              "type": "card",
+              "id": "card-rule",
+              "field": "rule"
+            }
+          ],
+          "conditions": {
+            "expression": {
+              "expr": ">",
+              "left": {
+                "expr": "number-ref",
+                "ref": "card-rule"
+              },
+              "right": {
+                "expr": "number",
+                "value": 1
+              }
+            }
+          },
+          "type": "aggregation-v1",
+          "stream_categories": [],
+          "filters": []
+        },
+        "priority": {
+          "@type": "integer",
+          "@value": 2
+        },
+        "notifications": [
+          {
+            "notification_id": {
+              "@type": "string",
+              "@value": "acd6f476-321f-47c0-a889-60b82ffe2b72"
+            },
+            "notification_parameters": null
+          }
+        ],
+        "remediation_steps": null,
+        "matched_at": null,
+        "_scope": {
+          "@type": "string",
+          "@value": "DEFAULT"
+        },
+        "notification_settings": {
+          "grace_period_ms": 300000,
+          "backlog_size": 1
+        },
+        "updated_at": null,
+        "title": {
+          "@type": "string",
+          "@value": "ED-05 | 동일 IP 다중 공격 상관"
+        },
+        "is_scheduled": {
+          "@type": "boolean",
+          "@value": false
+        },
+        "key_spec": [
+          "src_ip"
+        ],
+        "storage": [
+          {
+            "type": "persist-to-streams-v1",
+            "streams": [
+              "000000000000000000000002"
+            ]
+          }
+        ],
+        "alert": {
+          "@type": "boolean",
+          "@value": true
+        },
+        "description": {
+          "@type": "string",
+          "@value": "동일 IP에서 서로 다른 rule 2종 이상. decision 고정(alert)으로 무작위 차단 방지."
+        }
+      },
+      "constraints": [
+        {
+          "type": "server-version",
+          "version": ">=6.1.16+4a05695"
+        }
+      ]
+    },
+    {
+      "v": "1",
+      "type": {
+        "name": "notification",
+        "version": "1"
+      },
+      "id": "5b409daf-0f56-438b-b2a1-d7848cb60582",
+      "data": {
+        "title": {
+          "@type": "string",
+          "@value": "N8N-06 | 인시던트 승격"
+        },
+        "description": {
+          "@type": "string",
+          "@value": "Graylog 6.1 → n8n. 실제 수집 필드와 템플릿 변환 검증 후 사용."
+        },
+        "config": {
+          "type": "http-notification-v2",
+          "url": {
+            "@type": "string",
+            "@value": "http://host.docker.internal:5678/webhook/incident"
+          },
+          "skip_tls_verification": {
+            "@type": "boolean",
+            "@value": false
+          },
+          "method": {
+            "@type": "string",
+            "@value": "POST"
+          },
+          "time_zone": {
+            "@type": "string",
+            "@value": "Asia/Seoul"
+          },
+          "content_type": {
+            "@type": "string",
+            "@value": "JSON"
+          },
+          "headers": {
+            "@type": "string",
+            "@value": ""
+          },
+          "body_template": {
+            "@type": "string",
+            "@value": "{\n  \"alerts\": [\n    {\n      \"src_ip\": \"${event.fields.src_ip}\",\n      \"rule\": \"잠금 이후 공격 지속 인시던트\",\n      \"severity\": \"High\",\n      \"student\": \"security-team\"\n    }\n  ]\n}"
+          }
+        }
+      },
+      "constraints": [
+        {
+          "type": "server-version",
+          "version": ">=6.1.16+4a05695"
+        }
+      ]
+    },
+    {
+      "v": "1",
+      "type": {
+        "name": "event_definition",
+        "version": "1"
+      },
+      "id": "5b3e47f8-c8e7-4acd-9828-ae3821799eee",
+      "data": {
+        "field_spec": {
+          "src_ip": {
+            "data_type": "string",
+            "providers": [
+              {
+                "type": "template-v1",
+                "template": "${source.src_ip}",
+                "require_values": false
+              }
+            ]
+          }
+        },
+        "config": {
+          "query_parameters": [],
+          "search_within_ms": 300000,
+          "query": {
+            "@type": "string",
+            "@value": "rule:login-bruteforce AND src_ip:*"
+          },
+          "cron_expression": null,
+          "cron_timezone": null,
+          "use_cron_scheduling": false,
+          "streams": [],
+          "execute_every_ms": 60000,
+          "event_limit": 100,
+          "group_by": [
+            "src_ip"
+          ],
+          "series": [
+            {
+              "type": "count",
+              "id": "count-",
+              "field": null
+            }
+          ],
+          "conditions": {
+            "expression": {
+              "expr": ">=",
+              "left": {
+                "expr": "number-ref",
+                "ref": "count-"
+              },
+              "right": {
+                "expr": "number",
+                "value": 3
+              }
+            }
+          },
+          "type": "aggregation-v1",
+          "stream_categories": [],
+          "filters": []
+        },
+        "priority": {
+          "@type": "integer",
+          "@value": 2
+        },
+        "notifications": [
+          {
+            "notification_id": {
+              "@type": "string",
+              "@value": "5b409daf-0f56-438b-b2a1-d7848cb60582"
+            },
+            "notification_parameters": null
+          }
+        ],
+        "remediation_steps": null,
+        "matched_at": null,
+        "_scope": {
+          "@type": "string",
+          "@value": "DEFAULT"
+        },
+        "notification_settings": {
+          "grace_period_ms": 300000,
+          "backlog_size": 1
+        },
+        "updated_at": null,
+        "title": {
+          "@type": "string",
+          "@value": "ED-06 | 인시던트 승격"
+        },
+        "is_scheduled": {
+          "@type": "boolean",
+          "@value": false
+        },
+        "key_spec": [
+          "src_ip"
+        ],
+        "storage": [
+          {
+            "type": "persist-to-streams-v1",
+            "streams": [
+              "000000000000000000000002"
+            ]
+          }
+        ],
+        "alert": {
+          "@type": "boolean",
+          "@value": true
+        },
+        "description": {
+          "@type": "string",
+          "@value": "3건 이상 반복 실패를 후보로 생성; 실제 계정잠금 이후 지속 여부는 이 쿼리만으로 검증 불가."
+        }
+      },
+      "constraints": [
+        {
+          "type": "server-version",
+          "version": ">=6.1.16+4a05695"
+        }
+      ]
+    },
+    {
+      "v": "1",
+      "type": {
+        "name": "notification",
+        "version": "1"
+      },
+      "id": "6fc09745-f03d-488f-b503-914b78bbdae7",
+      "data": {
+        "title": {
+          "@type": "string",
+          "@value": "N8N-07 | Wazuh 룰 100211/100220/100221/100222"
+        },
+        "description": {
+          "@type": "string",
+          "@value": "Graylog 6.1 → n8n. 실제 수집 필드와 템플릿 변환 검증 후 사용."
+        },
+        "config": {
+          "type": "http-notification-v2",
+          "url": {
+            "@type": "string",
+            "@value": "http://host.docker.internal:5678/webhook/wazuh-alert"
+          },
+          "skip_tls_verification": {
+            "@type": "boolean",
+            "@value": false
+          },
+          "method": {
+            "@type": "string",
+            "@value": "POST"
+          },
+          "time_zone": {
+            "@type": "string",
+            "@value": "Asia/Seoul"
+          },
+          "content_type": {
+            "@type": "string",
+            "@value": "JSON"
+          },
+          "headers": {
+            "@type": "string",
+            "@value": ""
+          },
+          "body_template": {
+            "@type": "string",
+            "@value": "{\n  \"alerts\": [\n    {\n      \"rule_id\": \"${event.fields.rule_id}\",\n      \"rule_level\": \"${event.fields.rule_level}\",\n      \"srcip\": \"${event.fields.srcip}\",\n      \"agent\": \"${event.fields.agent}\",\n      \"description\": \"Wazuh rule triggered\",\n      \"file\": \"${event.fields.file}\",\n      \"fim_event\": \"${event.fields.fim_event}\",\n      \"student\": \"security-team\"\n    }\n  ]\n}"
+          }
+        }
+      },
+      "constraints": [
+        {
+          "type": "server-version",
+          "version": ">=6.1.16+4a05695"
+        }
+      ]
+    },
+    {
+      "v": "1",
+      "type": {
+        "name": "event_definition",
+        "version": "1"
+      },
+      "id": "e49f4d2a-d2f6-4fe4-a556-ffb8d4651df2",
+      "data": {
+        "field_spec": {
+          "rule_id": {
+            "data_type": "string",
+            "providers": [
+              {
+                "type": "template-v1",
+                "template": "${source.wazuh_rule_id}",
+                "require_values": false
+              }
+            ]
+          },
+          "rule_level": {
+            "data_type": "string",
+            "providers": [
+              {
+                "type": "template-v1",
+                "template": "${source.wazuh_rule_level}",
+                "require_values": false
+              }
+            ]
+          },
+          "srcip": {
+            "data_type": "string",
+            "providers": [
+              {
+                "type": "template-v1",
+                "template": "${source.wazuh_data_srcip}",
+                "require_values": false
+              }
+            ]
+          },
+          "agent": {
+            "data_type": "string",
+            "providers": [
+              {
+                "type": "template-v1",
+                "template": "${source.wazuh_agent_name}",
+                "require_values": false
+              }
+            ]
+          },
+          "file": {
+            "data_type": "string",
+            "providers": [
+              {
+                "type": "template-v1",
+                "template": "${source.wazuh_file}",
+                "require_values": false
+              }
+            ]
+          },
+          "fim_event": {
+            "data_type": "string",
+            "providers": [
+              {
+                "type": "template-v1",
+                "template": "${source.wazuh_syscheck_event}",
+                "require_values": false
+              }
+            ]
+          }
+        },
+        "config": {
+          "query_parameters": [],
+          "search_within_ms": 60000,
+          "query": {
+            "@type": "string",
+            "@value": "wazuh_rule_id:(100211 OR 100220 OR 100221 OR 100222)"
+          },
+          "cron_expression": null,
+          "cron_timezone": null,
+          "use_cron_scheduling": false,
+          "streams": [],
+          "execute_every_ms": 15000,
+          "event_limit": 100,
+          "group_by": [],
+          "series": [],
+          "conditions": {
+            "expression": null
+          },
+          "type": "aggregation-v1",
+          "stream_categories": [],
+          "filters": []
+        },
+        "priority": {
+          "@type": "integer",
+          "@value": 2
+        },
+        "notifications": [
+          {
+            "notification_id": {
+              "@type": "string",
+              "@value": "6fc09745-f03d-488f-b503-914b78bbdae7"
+            },
+            "notification_parameters": null
+          }
+        ],
+        "remediation_steps": null,
+        "matched_at": null,
+        "_scope": {
+          "@type": "string",
+          "@value": "DEFAULT"
+        },
+        "notification_settings": {
+          "grace_period_ms": 120000,
+          "backlog_size": 1
+        },
+        "updated_at": null,
+        "title": {
+          "@type": "string",
+          "@value": "ED-07 | Wazuh 룰 100211/100220/100221/100222"
+        },
+        "is_scheduled": {
+          "@type": "boolean",
+          "@value": false
+        },
+        "key_spec": [],
+        "storage": [
+          {
+            "type": "persist-to-streams-v1",
+            "streams": [
+              "000000000000000000000002"
+            ]
+          }
+        ],
+        "alert": {
+          "@type": "boolean",
+          "@value": true
+        },
+        "description": {
+          "@type": "string",
+          "@value": "Wazuh JSON 파싱 pipeline으로 wazuh_ 필드 생성 전제. 각 이벤트 source 필드 실제 생성 확인."
+        }
+      },
+      "constraints": [
+        {
+          "type": "server-version",
+          "version": ">=6.1.16+4a05695"
+        }
+      ]
+    },
+    {
+      "v": "1",
+      "type": {
+        "name": "notification",
+        "version": "1"
+      },
+      "id": "19c5d92c-1a39-468b-8449-df2bdb438efc",
+      "data": {
+        "title": {
+          "@type": "string",
+          "@value": "N8N-08 | 동일 계정 브루트포스"
+        },
+        "description": {
+          "@type": "string",
+          "@value": "Graylog 6.1 → n8n. 실제 수집 필드와 템플릿 변환 검증 후 사용."
+        },
+        "config": {
+          "type": "http-notification-v2",
+          "url": {
+            "@type": "string",
+            "@value": "http://host.docker.internal:5678/webhook/login-bruteforce"
+          },
+          "skip_tls_verification": {
+            "@type": "boolean",
+            "@value": false
+          },
+          "method": {
+            "@type": "string",
+            "@value": "POST"
+          },
+          "time_zone": {
+            "@type": "string",
+            "@value": "Asia/Seoul"
+          },
+          "content_type": {
+            "@type": "string",
+            "@value": "JSON"
+          },
+          "headers": {
+            "@type": "string",
+            "@value": ""
+          },
+          "body_template": {
+            "@type": "string",
+            "@value": "{\n  \"alerts\": [\n    {\n      \"username\": \"${event.fields.username}\",\n      \"count\": \"${event.aggregation_conditions.count}\",\n      \"student\": \"security-team\"\n    }\n  ]\n}"
+          }
+        }
+      },
+      "constraints": [
+        {
+          "type": "server-version",
+          "version": ">=6.1.16+4a05695"
+        }
+      ]
+    },
+    {
+      "v": "1",
+      "type": {
+        "name": "event_definition",
+        "version": "1"
+      },
+      "id": "203f6944-73df-45d9-9309-c76b699c94ba",
+      "data": {
+        "field_spec": {
+          "username": {
+            "data_type": "string",
+            "providers": [
+              {
+                "type": "template-v1",
+                "template": "${source.username}",
+                "require_values": false
+              }
+            ]
+          }
+        },
+        "config": {
+          "query_parameters": [],
+          "search_within_ms": 300000,
+          "query": {
+            "@type": "string",
+            "@value": "rule:login-bruteforce AND username:*"
+          },
+          "cron_expression": null,
+          "cron_timezone": null,
+          "use_cron_scheduling": false,
+          "streams": [],
+          "execute_every_ms": 60000,
+          "event_limit": 100,
+          "group_by": [
+            "username"
+          ],
+          "series": [
+            {
+              "type": "count",
+              "id": "count-",
+              "field": null
+            }
+          ],
+          "conditions": {
+            "expression": {
+              "expr": ">=",
+              "left": {
+                "expr": "number-ref",
+                "ref": "count-"
+              },
+              "right": {
+                "expr": "number",
+                "value": 10
+              }
+            }
+          },
+          "type": "aggregation-v1",
+          "stream_categories": [],
+          "filters": []
+        },
+        "priority": {
+          "@type": "integer",
+          "@value": 2
+        },
+        "notifications": [
+          {
+            "notification_id": {
+              "@type": "string",
+              "@value": "19c5d92c-1a39-468b-8449-df2bdb438efc"
+            },
+            "notification_parameters": null
+          }
+        ],
+        "remediation_steps": null,
+        "matched_at": null,
+        "_scope": {
+          "@type": "string",
+          "@value": "DEFAULT"
+        },
+        "notification_settings": {
+          "grace_period_ms": 300000,
+          "backlog_size": 1
+        },
+        "updated_at": null,
+        "title": {
+          "@type": "string",
+          "@value": "ED-08 | 동일 계정 브루트포스"
+        },
+        "is_scheduled": {
+          "@type": "boolean",
+          "@value": false
+        },
+        "key_spec": [
+          "username"
+        ],
+        "storage": [
+          {
+            "type": "persist-to-streams-v1",
+            "streams": [
+              "000000000000000000000002"
+            ]
+          }
+        ],
+        "alert": {
+          "@type": "boolean",
+          "@value": true
+        },
+        "description": {
+          "@type": "string",
+          "@value": "동일 계정 5분 10회 이상. src_ip는 group_by 보존되지 않으므로 생략."
+        }
+      },
+      "constraints": [
+        {
+          "type": "server-version",
+          "version": ">=6.1.16+4a05695"
+        }
+      ]
+    },
+    {
+      "v": "1",
+      "type": {
+        "name": "notification",
+        "version": "1"
+      },
+      "id": "f2ec095a-edab-42c7-8267-02418caebc20",
+      "data": {
+        "title": {
+          "@type": "string",
+          "@value": "N8N-09 | 웹스캐너 404 폭주"
+        },
+        "description": {
+          "@type": "string",
+          "@value": "Graylog 6.1 → n8n. 실제 수집 필드와 템플릿 변환 검증 후 사용."
+        },
+        "config": {
+          "type": "http-notification-v2",
+          "url": {
+            "@type": "string",
+            "@value": "http://host.docker.internal:5678/webhook/snort-ip-block"
+          },
+          "skip_tls_verification": {
+            "@type": "boolean",
+            "@value": false
+          },
+          "method": {
+            "@type": "string",
+            "@value": "POST"
+          },
+          "time_zone": {
+            "@type": "string",
+            "@value": "Asia/Seoul"
+          },
+          "content_type": {
+            "@type": "string",
+            "@value": "JSON"
+          },
+          "headers": {
+            "@type": "string",
+            "@value": ""
+          },
+          "body_template": {
+            "@type": "string",
+            "@value": "{\n  \"alerts\": [\n    {\n      \"src_ip\": \"${event.fields.src_ip}\",\n      \"count\": \"${event.aggregation_conditions.count}\",\n      \"student\": \"security-team\"\n    }\n  ]\n}"
+          }
+        }
+      },
+      "constraints": [
+        {
+          "type": "server-version",
+          "version": ">=6.1.16+4a05695"
+        }
+      ]
+    },
+    {
+      "v": "1",
+      "type": {
+        "name": "event_definition",
+        "version": "1"
+      },
+      "id": "039a616b-5cae-43ff-846a-f75021f3cdf6",
+      "data": {
+        "field_spec": {
+          "src_ip": {
+            "data_type": "string",
+            "providers": [
+              {
+                "type": "template-v1",
+                "template": "${source.src_ip}",
+                "require_values": false
+              }
+            ]
+          }
+        },
+        "config": {
+          "query_parameters": [],
+          "search_within_ms": 60000,
+          "query": {
+            "@type": "string",
+            "@value": "rule:web-scan AND src_ip:*"
+          },
+          "cron_expression": null,
+          "cron_timezone": null,
+          "use_cron_scheduling": false,
+          "streams": [],
+          "execute_every_ms": 30000,
+          "event_limit": 100,
+          "group_by": [
+            "src_ip"
+          ],
+          "series": [
+            {
+              "type": "count",
+              "id": "count-",
+              "field": null
+            }
+          ],
+          "conditions": {
+            "expression": {
+              "expr": ">=",
+              "left": {
+                "expr": "number-ref",
+                "ref": "count-"
+              },
+              "right": {
+                "expr": "number",
+                "value": 30
+              }
+            }
+          },
+          "type": "aggregation-v1",
+          "stream_categories": [],
+          "filters": []
+        },
+        "priority": {
+          "@type": "integer",
+          "@value": 2
+        },
+        "notifications": [
+          {
+            "notification_id": {
+              "@type": "string",
+              "@value": "f2ec095a-edab-42c7-8267-02418caebc20"
+            },
+            "notification_parameters": null
+          }
+        ],
+        "remediation_steps": null,
+        "matched_at": null,
+        "_scope": {
+          "@type": "string",
+          "@value": "DEFAULT"
+        },
+        "notification_settings": {
+          "grace_period_ms": 300000,
+          "backlog_size": 1
+        },
+        "updated_at": null,
+        "title": {
+          "@type": "string",
+          "@value": "ED-09 | 웹스캐너 404 폭주"
+        },
+        "is_scheduled": {
+          "@type": "boolean",
+          "@value": false
+        },
+        "key_spec": [
+          "src_ip"
+        ],
+        "storage": [
+          {
+            "type": "persist-to-streams-v1",
+            "streams": [
+              "000000000000000000000002"
+            ]
+          }
+        ],
+        "alert": {
+          "@type": "boolean",
+          "@value": true
+        },
+        "description": {
+          "@type": "string",
+          "@value": "1분에 404 성격의 web-scan 로그 30회 이상이라는 전제. 현재 n8n 코드에서 404 확인은 안 함."
+        }
+      },
+      "constraints": [
+        {
+          "type": "server-version",
+          "version": ">=6.1.16+4a05695"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+
+# ED-01 관리자 권한 / RBAC 감사 테스트
+# 실제 권한 변경 없이 모의 로그만 전송
+
+$GRAYLOG_HOST = "127.0.0.1"
+$GRAYLOG_PORT = 12201
+
+$log = @{
+    version = "1.1"
+    host = "rbac-security-test"
+    short_message = "Unauthorized admin privilege assignment detected"
+    level = 4
+
+    _rule = "priv-unauthorized-admin"
+    _src_ip = "203.0.113.80"
+    _user = "test_admin"
+    _username = "test_admin"
+    _granted_by = "unknown_operator"
+    _previous_role = "user"
+    _new_role = "admin"
+    _action = "privilege-escalation"
+    _test_source = "ed01-powershell-lab"
+} | ConvertTo-Json -Compress
+
+$udp = New-Object System.Net.Sockets.UdpClient
+
+try {
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($log)
+
+    [void]$udp.Send(
+        $bytes,
+        $bytes.Length,
+        $GRAYLOG_HOST,
+        $GRAYLOG_PORT
+    )
+
+    Write-Host "ED-01 RBAC 모의 경보 전송 완료"
+    Write-Host "User: test_admin"
+    Write-Host "IP: 203.0.113.80"
+    Write-Host "Action: privilege-escalation"
+}
+finally {
+    $udp.Close()
+}
