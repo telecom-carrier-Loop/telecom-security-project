@@ -14,7 +14,7 @@ function New-Case([string]$Name) {
     $role=@{Stage='replica-ready';ProductionId='live';ImageId='sha256:fixed84';CloneVolume='live-data';SourceVolume='preserved-original';PrimaryUuid='98e409fb-a5c6-11f1-8bc1-9f1aa3e284ef'}
     [IO.File]::WriteAllText((Join-Path $rolePath 'state.json'),($role|ConvertTo-Json),$utf8)
     $live=[PSCustomObject]@{Id='live';Name='/mysql-lab';Image='sha256:fixed84';State=[PSCustomObject]@{Running=$true;ExitCode=0};Mounts=@([PSCustomObject]@{Type='volume';Name='live-data';Destination='/var/lib/mysql';RW=$true})}
-    $global:BackupMock=@{Containers=@{live=$live};Calls=[Collections.Generic.List[object]]::new();Sql=[Collections.Generic.List[object]]::new();Files=@{};Modes=@{};Shared=$false;GuardFailure=$false;DumpFailure=$false;Incomplete=$false;Gtid=$false;WrongHeaders=$false;UnsafeMount=$false;PublishedPort=$false;NotReady=$false;RestoreFailure=$false;CheckFailure=$false;BadStop=$false;BadClientMode=$false}
+    $global:BackupMock=@{Containers=@{live=$live};Calls=[Collections.Generic.List[object]]::new();Sql=[Collections.Generic.List[object]]::new();Files=@{};Modes=@{};Shared=$false;GuardFailure=$false;DumpFailure=$false;Incomplete=$false;Gtid=$false;WrongHeaders=$false;UnsafeMount=$false;PublishedPort=$false;NotReady=$false;RestoreFailure=$false;CheckFailure=$false;BadStop=$false;BadClientMode=$false;EscapedRows=$false;DuplicateRows=$false;BadRowCount=$false}
     $path
 }
 function global:Start-Sleep { param($Seconds) }
@@ -79,7 +79,16 @@ function global:docker {
                 if($c[-1] -eq '/tmp/loop-restore-check.sql') {
                     "my_new_board_db.posts`tcheck`tstatus`tOK"
                     if(-not $m.CheckFailure) { "my_new_board_db.users`tcheck`tstatus`tOK" }
-                    "loop_rows=posts`t1";"loop_rows=users`t0"
+                    # mysql --batch escapes CHAR(9) inside a field; column delimiters remain tabs.
+                    if($sql.Contains('CHAR(9)') -or $m.EscapedRows) {
+                        'loop_rows=posts\t1';'loop_rows=users\t0'
+                    }
+                    else {
+                        Assert-Test ($sql.Contains("SELECT 'loop_rows=posts',COUNT(1)")) 'Row counts must be separate SQL columns.'
+                        if($m.BadRowCount) { "loop_rows=posts`tinvalid" } else { "loop_rows=posts`t1" }
+                        "loop_rows=users`t0"
+                        if($m.DuplicateRows) { "loop_rows=users`t0" }
+                    }
                 }
             }
             return
@@ -175,17 +184,19 @@ public static class LoopNativeArgvProbe {
     }
     Write-Host 'PASS: original/live volume and exposed restore port rejected before start'
 
-    foreach($failure in @('NotReady','RestoreFailure','CheckFailure','BadStop','BadClientMode')) {
+    foreach($failure in @('NotReady','RestoreFailure','CheckFailure','BadStop','BadClientMode','EscapedRows','DuplicateRows','BadRowCount')) {
         $p=New-Case $failure;Run-Step $p Backup;$global:BackupMock[$failure]=$true
         $message='Docker exec failed'
         if($failure -eq 'NotReady') { $message='did not become ready' }
         if($failure -eq 'CheckFailure') { $message='table check' }
         if($failure -eq 'BadStop') { $message='shutdown was not clean' }
         if($failure -eq 'BadClientMode') { $message='must have mode 600' }
+        if($failure -in @('EscapedRows','DuplicateRows','BadRowCount')) { $message='row count failed' }
         Expect-Failure $p RestoreTest $message
         $state=Read-State $p
         Assert-Test ($state.Stage -ne 'restore-verified' -and $global:BackupMock.Containers.live.State.Running) 'Failed drill claimed success or stopped live DB.'
         if ($failure -eq 'BadClientMode') { Assert-Test (@($global:BackupMock.Sql | Where-Object Id -eq 'test').Count -eq 0) 'Insecure client mode reached restore SQL.' }
+        if ($failure -in @('CheckFailure','EscapedRows','DuplicateRows','BadRowCount')) { Assert-Test (Test-Path (Join-Path $state.Directory 'restore-report.txt')) 'Failed validation discarded its diagnostic report.' }
         if ($failure -eq 'NotReady') {
             Assert-Test ($state.ReadyProbeExitCode -eq 1) 'Readiness failure code was discarded.'
             $global:BackupMock.NotReady=$false
