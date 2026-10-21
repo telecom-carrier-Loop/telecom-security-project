@@ -82,8 +82,18 @@ powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure
 
 현장 수동 백업·복구 PASS 다음에 전용 백업 계정, 실제 백업 저장 장치, 실행 주기·보관 기간을 정하고 Windows 작업 스케줄러를 구성한다. 현재는 수동 실행이며 자동 예약·보관 정리·별도 장치 복사는 포함하지 않는다. `.secrets`의 같은 디스크 백업만으로 PC2 디스크 장애를 대비할 수 없으므로 별도 장치 보관도 다음 단계에서 검증한다.
 
+## 준비 확인 120초 시간 초과
+
+초기 도구의 `sh -c` 준비 확인에는 중첩된 따옴표가 있었다. Windows PowerShell 5.1이 네이티브 명령에 인수를 전달할 때 이를 손실하는 문제를 실제 argv 검사 실행 파일로 재현했다. MySQL이 실행돼 있어도 SQL 전달 실패로 준비 판정이 나지 않을 수 있다. 수정본은 LF 형식의 `restore-ready.sh`와 `restore-ready.sql`을 시험 컨테이너에 복사하고 파일 경로만 전달한다. PID 1과 버전/server_id 검사는 유지한다.
+
+백업 PASS 후 `Isolated MySQL did not become ready within 120 seconds`가 나왔다면 수정된 도구를 받고 **RestoreTest만 재실행**한다. 기존 백업과 같은 시험 컨테이너·볼륨을 재사용하므로 `Backup`이나 초기 복제 복원을 다시 하지 않는다. 복구 SQL이 라이브 `mysql-lab`에서 실행되는 경로도 추가하지 않는다.
+
+수정본에서도 시간 초과가 나면 `Status`를 실행한다. 마지막 준비 확인 종료 코드와 시험 컨테이너의 상태·종료 코드·OOM 여부·시작 오류를 출력한다. 실제 서버 초기화 지연·자원 부족·접속 설정 문제는 이 정보로 구분해 추가 확인해야 한다. root 비밀번호나 원본 백업 SQL을 공유하지 않는다.
+
 ## 도구 검증
 
-Windows PowerShell 5.1 Docker 대역 시험에서 잘못된/공유된 원본, 불건전 복제 검사, 덤프 실패·미완료·테이블 변경·GTID 혼입, SQL/manifest 변조, 라이브 볼륨 재사용, 포트 공개, 초기화·복원·테이블 검사·정상 종료 실패, 복구 재시도와 비밀번호 인수 노출을 검사한다. 실제 Docker/MySQL 동작과 복구 결과는 현장 실행으로 확인해야 한다.
+Windows PowerShell 5.1 Docker 대역 시험에서 잘못된/공유된 원본, 불건전 복제 검사, 덤프 실패·미완료·테이블 변경·GTID 혼입, SQL/manifest 변조, 라이브 볼륨 재사용, 포트 공개, 초기화·복원·테이블 검사·정상 종료 실패, 복구 재시도와 비밀번호 인수 노출을 검사한다. 실제 네이티브 실행 파일로 기존 따옴표 손실과 수정된 파일 경로 인수 보존을 확인하며, 시간 초과 이후 새 컨테이너를 만들지 않고 재개되는 것도 검사한다. 실제 Docker/MySQL 동작과 복구 결과는 현장 실행으로 확인해야 한다.
 
 참고: [MySQL mysqldump와 단일 트랜잭션·GTID 옵션](https://dev.mysql.com/doc/refman/8.4/en/mysqldump.html).
+
+참고: [PowerShell 네이티브 명령 인수와 따옴표 전달](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_parsing#passing-arguments-that-contain-quote-characters).
