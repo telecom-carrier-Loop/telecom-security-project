@@ -129,6 +129,79 @@ PC2 도구 검증은 Windows PowerShell 5.1의 Docker 대역으로 진행한다.
 
 참고: [DB 복제 필터의 DDL 규칙](https://dev.mysql.com/doc/refman/8.4/en/replication-options-replica.html#option_mysqld_replicate-do-db), [복제 연결 상태 컬럼](https://dev.mysql.com/doc/refman/8.4/en/performance-schema-replication-connection-configuration-table.html).
 
+## 복제 연결 후 실제 데이터·DDL 반영 시험
+
+2026-10-21 현장 PC2에서 비밀번호 수정 후 `Start`와 `Verify` PASS를 확인했다. server_id=2, read_only=1, super_read_only=1이며 수신·적용 스레드와 관측 GTID 반영 검사를 통과했다. 이는 연결 검증 완료이며 정기 백업·복구 훈련 완료를 의미하지 않는다.
+
+검증 전용 테이블로 생성·추가·구조 변경·수정·삭제 반영을 시험한다. 각 PC의 MySQL 콘솔을 열고 아래 순서로 번갈아 실행한다. PC2에 직접 스키마나 데이터를 만들지 않는다. 동명 테이블이 이미 있어 CREATE가 실패하면 중단하고 기존 테이블의 용도를 확인한다.
+
+PC1 PowerShell:
+
+```powershell
+docker exec -it flask_mysql mysql --user=root --password --default-character-set=utf8mb4
+```
+
+PC2 PowerShell:
+
+```powershell
+docker exec -it mysql-lab mysql --user=root --password --default-character-set=utf8mb4
+```
+
+1. PC1 MySQL에서 생성·추가:
+
+```sql
+USE my_new_board_db;
+CREATE TABLE _loop_infra_repl_probe_20261021 (
+    probe_id INT NOT NULL PRIMARY KEY,
+    marker VARCHAR(64) NOT NULL
+) ENGINE=InnoDB;
+INSERT INTO _loop_infra_repl_probe_20261021 (probe_id, marker)
+VALUES (1, 'created-on-pc1');
+```
+
+2. PC2 MySQL에서 조회. probe_id=1, marker=created-on-pc1이어야 한다. 지연이면 잠시 기다린 후 조회만 재시도한다.
+
+```sql
+USE my_new_board_db;
+SELECT probe_id, marker FROM _loop_infra_repl_probe_20261021;
+```
+
+3. PC1 MySQL에서 컬럼 추가·데이터 수정:
+
+```sql
+USE my_new_board_db;
+ALTER TABLE _loop_infra_repl_probe_20261021 ADD COLUMN checked_at DATETIME NULL;
+UPDATE _loop_infra_repl_probe_20261021
+SET marker='updated-on-pc1', checked_at=UTC_TIMESTAMP()
+WHERE probe_id=1;
+```
+
+4. PC2 MySQL에서 조회. checked_at 컬럼과 값, marker=updated-on-pc1을 확인한다.
+
+```sql
+SELECT probe_id, marker, checked_at FROM my_new_board_db._loop_infra_repl_probe_20261021;
+```
+
+5. 확인 후 PC1 MySQL에서 검증 테이블을 삭제한다.
+
+```sql
+USE my_new_board_db;
+DROP TABLE _loop_infra_repl_probe_20261021;
+```
+
+6. PC2 MySQL에서 삭제 반영 확인. 결과는 0이어야 한다.
+
+```sql
+SELECT COUNT(1) AS probe_tables_remaining
+FROM information_schema.TABLES
+WHERE TABLE_SCHEMA='my_new_board_db'
+  AND TABLE_NAME='_loop_infra_repl_probe_20261021';
+```
+
+오류가 나거나 변경이 계속 반영되지 않으면 후속 DDL·삭제를 실행하지 말고 PC2 `SHOW REPLICA STATUS\G`의 IO/SQL 상태와 오류 번호를 확인한다. 정상 완료 후 두 MySQL 콘솔에서 `exit;`로 나온다. 이후 순서는 수동 백업 → 새 볼륨·격리 컨테이너 복구 시험 → 실제 저장소·계정 조건에 맞춘 정기 백업 예약 → 별도 장치 복사·보관 정책 → 수동 장애 전환 훈련이다. 초기 전달 스냅샷은 이미 존재하지만 정기 백업 예약과 복구 가능성 검증은 별도다.
+
+Flask 담당자는 모든 앱 쓰기가 PC1 DB를 향하도록 설정한다. Docker로 옮긴 Flask에서 `127.0.0.1`은 Flask 컨테이너 자신이며 PC1 MySQL 주소를 뜻하지 않는다. PC2의 로컬 MySQL은 읽기 전용 복제본으로 유지한다.
+
 ### ERROR 3056: 기존 68자 복제 비밀번호 수정
 
 이전 도구가 생성한 68자 비밀번호는 MySQL `CHANGE REPLICATION SOURCE TO ... SOURCE_PASSWORD`의 32자 제한 때문에 거부된다. `Restore`와 `Activate`가 PASS이고 `Start`에서 3056 오류가 난 경우 DB 복원·포트 전환은 완료된 상태다. `Prepare`·`Stage`·`Restore`·`Activate`를 다시 실행하지 않는다.
