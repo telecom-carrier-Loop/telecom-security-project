@@ -24,11 +24,24 @@ a { color: var(--signal); }
 .muted { color: var(--ink-soft); font-size: 0.875rem; margin: 0.25rem 0; }
 
 /* 레이아웃 */
-.shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+.shell { display: flex; flex-direction: column; min-height: 100vh; }
 .sidebar { background: var(--surface); border-right: 1px solid var(--line); padding: 1.5rem 1rem; }
 .sidebar nav { display: flex; flex-direction: column; gap: 2px; margin-top: 1.5rem; }
 .sidebar__role { font-size: 0.8rem; color: inherit; opacity: 0.75; margin: 0.5rem 0 0; }
 .brand { display: flex; align-items: center; }
+/* 상단 네비 */
+.topnav { display: flex; align-items: center; gap: 1.5rem; padding: 0.75rem 1.5rem; background: var(--surface); border-bottom: 1px solid var(--line);}
+.topnav__brand { flex-shrink: 0; }
+.topnav__menu { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; flex: 1; min-width: 0; }
+.topnav__menu .nav__link { padding: 0.45rem 0.75rem; border-radius: 8px; color: inherit; text-decoration: none; font-size: 0.9rem; }
+.topnav__menu .nav__link:hover { background: var(--paper); }
+.topnav__menu .nav__link.active { background: color-mix(in srgb, var(--signal) 10%, transparent); color: var(--signal); font-weight: 500; }
+.topnav__user { position: relative; flex-shrink: 0; margin-left: auto; }
+.topnav__user-btn { font: inherit; font-weight: 500; background: none; border: 1px solid var(--line); border-radius: 8px; padding: 0.4rem 0.75rem; cursor: pointer; color: var(--ink); }
+.topnav__user-btn:hover { border-color: var(--signal); color: var(--signal); }
+.user-menu { position: absolute; right: 0; top: calc(100% + 0.35rem); min-width: 160px; margin: 0; padding: 0.35rem 0; list-style: none; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(21, 32, 43, 0.12); z-index: 50; }
+.user-menu a, .user-menu button { display: block; width: 100%; text-align: left; font: inherit; padding: 0.55rem 1rem; border: none; background: none; color: inherit; text-decoration: none; cursor: pointer; }
+.user-menu a:hover, .user-menu button:hover { background: var(--paper); }
 /* 워드마크: L · ∞ · P 를 붙여 하나의 고리처럼 읽히게 */
 .logo { display: inline-flex; align-items: center; font-weight: 600; letter-spacing: -0.02em; line-height: 1; color: var(--ink); }
 .logo--sm { font-size: 1rem; }
@@ -50,9 +63,12 @@ a { color: var(--signal); }
 main { flex: 1; padding: 2rem; max-width: 1100px; width: 100%; }
 .footer { padding: 1rem 2rem; font-size: 0.8rem; color: var(--ink-soft); }
 
-.shell--admin .sidebar { background: var(--ink); color: #e6ebf1; border-right: none; }
 .shell--admin .nav__link:hover { background: rgba(255,255,255,0.08); }
 .shell--admin .nav__link.active { background: rgba(255,255,255,0.12); color: #fff; }
+.shell--admin .topnav { background: var(--ink); color: #e6ebf1; border-bottom: none; }
+.shell--admin .topnav__menu .nav__link:hover { background: rgba(255, 255, 255, 0.08); }
+.shell--admin .topnav__menu .nav__link.active { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.shell--admin .topnav__user-btn { border-color: rgba(255, 255, 255, 0.25); color: #e6ebf1; }
 
 /* 페이지 */
 .page__title { font-size: 1.5rem; margin-bottom: 1.25rem; }
@@ -104,9 +120,10 @@ input[aria-invalid='true'] { border-color: var(--danger); }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
 
 @media (max-width: 860px) {
-  .shell { grid-template-columns: 1fr; }
-  .sidebar { padding: 1rem; }
-  .sidebar nav { flex-direction: row; flex-wrap: wrap; margin-top: 0.75rem; }
+  .shell { display: flex; flex-direction: column; }
+  .topnav { flex-wrap: wrap; gap: 0.75rem; padding: 0.75rem 1rem; }
+  .topnav__menu { width: 100%; order: 3; }
+  .topnav__user { margin-left: 0; }
   .nav__link--admin { margin-top: 0; border-top: none; }
   .grid, .grid--2 { grid-template-columns: 1fr; }
   main { padding: 1.25rem; }
@@ -307,3 +324,8 @@ a.tool-card:hover { border-color: var(--signal); }
 .shell--admin main { max-width: 1400px; }
 .flow-card__link { align-self: flex-start; margin-top: 0.4rem; text-decoration: none; }
 .grafana-frame { width: 100%; height: calc(100vh - 220px); min-height: 520px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.grafana-frame--compact { height: 320px; min-height: 240px; }
+.grafana-snippet { width: 100%; padding: 0; overflow: hidden; }
+.grafana-snippet .panel__head { padding: 1rem 1.25rem 0.5rem; }
+.grafana-snippet .muted { padding: 0 1.25rem 1.25rem; }
+.grafana-snippet .grafana-frame { border: none; border-radius: 0 0 var(--radius) var(--radius); }

@@ -3,7 +3,7 @@ import { useAuth } from '../../app/providers/AuthProvider'
 import ErrorState from '../../components/common/ErrorState'
 import Loading from '../../components/common/Loading'
 import { STATUS_LABEL, dateTime, won } from '../../utils/format'
-import type { AdminDashboard, Severity } from '../../services/types'
+import type { AdminDashboard, Severity, MonitoringLink } from '../../services/types'
 import { useApi } from '../../utils/useApi'
 import MonitoringLinks from '../../components/common/MonitoringLinks'
 
@@ -15,9 +15,11 @@ const SEVERITIES: [Severity, string][] = [
 export default function AdminDashboardPage() {
   const { user } = useAuth()
   const { loading, error, data, reload } = useApi<AdminDashboard>('/admin/dashboard')
+  const mon = useApi<{ links: MonitoringLink[]; grafana_embed_url: string | null }>('/admin/monitoring-links')
   if (loading) return <Loading />
   if (error || !data) return <ErrorState error={error} onRetry={reload} />
   const { customers, support, billing, incidents, protection } = data
+  const embedUrl = mon.data?.grafana_embed_url ?? null
 
   return (
     <section className="page">
@@ -88,6 +90,29 @@ export default function AdminDashboardPage() {
         </article>
       </div>
 
+      <h2 className="section-title">관제 지표</h2>
+      <article className="panel grafana-snippet">
+        <header className="panel__head">
+          <h2>Grafana</h2>
+          <Link to="/admin/grafana">전체 보기</Link>
+        </header>
+        {mon.loading ? (
+          <Loading label="관제 화면 불러오는 중" />
+        ) : embedUrl ? (
+          <iframe
+            className="grafana-frame grafana-frame--compact"
+            src={embedUrl}
+            title="L∞P 보안 관제 지표 (Grafana)"
+            referrerPolicy="no-referrer"
+            sandbox="allow-scripts allow-same-origin allow-popups"
+          />
+        ) : (
+          <p className="muted">
+            서버 <span className="mono">GRAFANA_EMBED_URL</span>이 없으면 여기에 그래프가 표시되지 않습니다.
+            <Link to="/admin/grafana"> 설정 안내 보기</Link>
+          </p>
+        )}
+      </article>
       <h2 className="section-title">관제 도구 바로가기</h2>
       <MonitoringLinks variant="cards" />
     </section>
