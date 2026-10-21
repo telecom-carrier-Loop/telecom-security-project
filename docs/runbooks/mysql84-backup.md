@@ -4,7 +4,7 @@
 
 2026-10-21 PC1 `flask_mysql` → PC2 `mysql-lab`의 TLS·GTID 복제 연결과 PC2 읽기 전용 설정을 확인했다. 검증 테이블의 행 추가·컬럼 추가·수정·삭제가 PC2에 반영된 현장 결과도 확인했다. 이후 현장 수동 백업과 격리 복구 시험에서 22개 테이블 CHECK TABLE OK, 행 수 보고서 저장, `restore-verified`, 시험 컨테이너 정상 종료까지 확인했다. 사용자는 백업을 다른 위치에도 보관했다.
 
-`infrastructure/tools/mysql84-backup.ps1`은 **PC2에서** 실행한다. `.secrets/mysql84-replication/pc2/state.json`의 `replica-ready` 상태와 실제 이미지·컨테이너·볼륨을 확인한다. 라이브 DB 복원이나 자동 장애 전환 도구가 아니다. 기존 원본·복제 DB는 유지한다. 현재 수동 root 인증과 백업 계정의 저장된 자격 증명 인증을 지원하며 예약 작업은 아직 등록하지 않는다.
+`infrastructure/tools/mysql84-backup.ps1`은 **PC2에서** 실행한다. `.secrets/mysql84-replication/pc2/state.json`의 `replica-ready` 상태와 실제 이미지·컨테이너·볼륨을 확인한다. 라이브 DB 복원이나 자동 장애 전환 도구가 아니다. 기존 원본·복제 DB는 유지한다. 수동 root 인증과 백업 계정의 저장된 자격 증명 인증을 지원한다. 예약은 별도 [1시간 주기 백업 도구](mysql84-backup-schedule.md)로 등록·검증한다.
 
 ## 1. 백업 준비
 
@@ -225,7 +225,7 @@ powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -Fil
 
 최종 `restore-verified`까지 확인하면 예약 작업 등록으로 진행한다. **현재 자동 예약은 미등록**이다. 이후 예약 실행도 같은 PC·Windows 사용자로 해야 하며 PC와 Docker Desktop이 실행 중이어야 한다. 암호화 파일을 다른 PC에 복사해도 그곳에서 사용할 수 없다. 입력 실수로 BackupSaved 인증이 실패하면 비밀번호나 인증 파일을 공개하지 말고 실패 액션과 Status만 확인한다.
 
-Windows PowerShell 5.1 시험에서 실제 DPAPI 왕복·접근 권한, 따옴표·역슬래시·공백·제어 문자·유니코드의 옵션 파일 값 이스케이프, 비대화형 인수와 root 전환 없음, 임시 파일 정리 및 정리 실패, 저장 자격 증명 백업의 격리 복구 호환성, 중복 실행 차단을 검사한다. Docker/MySQL은 대역이며 실제 PC2의 BackupSaved·RestoreTest 결과는 후속 현장 검증 대상이다.
+Windows PowerShell 5.1 시험에서 실제 DPAPI 왕복·접근 권한, 따옴표·역슬래시·공백·제어 문자·유니코드의 옵션 파일 값 이스케이프, 비대화형 인수와 root 전환 없음, 임시 파일 정리 및 정리 실패, 저장 자격 증명 백업의 격리 복구 호환성, 중복 실행 차단을 검사한다. 이후 현장 PC2에서도 SaveCredential·BackupSaved와 새 백업의 RestoreTest PASS(22개 테이블)를 확인했다. 다음은 사용자가 지정한 [1시간 주기 예약 등록과 실제 예약 실행 검증](mysql84-backup-schedule.md)이다.
 
 ## 준비 확인 120초 시간 초과
 
