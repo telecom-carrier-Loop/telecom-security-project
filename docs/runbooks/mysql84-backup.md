@@ -4,7 +4,7 @@
 
 2026-10-21 PC1 `flask_mysql` → PC2 `mysql-lab`의 TLS·GTID 복제 연결과 PC2 읽기 전용 설정을 확인했다. 검증 테이블의 행 추가·컬럼 추가·수정·삭제가 PC2에 반영된 현장 결과도 확인했다. 이후 현장 수동 백업과 격리 복구 시험에서 22개 테이블 CHECK TABLE OK, 행 수 보고서 저장, `restore-verified`, 시험 컨테이너 정상 종료까지 확인했다. 사용자는 백업을 다른 위치에도 보관했다.
 
-`infrastructure/tools/mysql84-backup.ps1`은 **PC2에서** 실행한다. `.secrets/mysql84-replication/pc2/state.json`의 `replica-ready` 상태와 실제 이미지·컨테이너·볼륨을 확인한다. 라이브 DB 복원이나 자동 장애 전환 도구가 아니다. 기존 원본·복제 DB는 유지한다.
+`infrastructure/tools/mysql84-backup.ps1`은 **PC2에서** 실행한다. `.secrets/mysql84-replication/pc2/state.json`의 `replica-ready` 상태와 실제 이미지·컨테이너·볼륨을 확인한다. 라이브 DB 복원이나 자동 장애 전환 도구가 아니다. 기존 원본·복제 DB는 유지한다. 현재 수동 root 인증과 백업 계정의 저장된 자격 증명 인증을 지원하며 예약 작업은 아직 등록하지 않는다.
 
 ## 1. 백업 준비
 
@@ -80,7 +80,7 @@ powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure
 
 ## 이후 작업
 
-현장 수동 백업·복구 PASS 다음에 전용 백업 계정을 준비하고, 비대화형 백업 실행을 검증한 뒤 Windows 작업 스케줄러를 구성한다. 현재 도구는 root 비밀번호를 두 번 입력하므로 그대로 예약하지 않는다. 자동 예약·보관 정리·별도 장치 복사는 아직 포함하지 않는다. 다른 폴더가 같은 물리 디스크에 있다면 PC2 디스크 장애 대비 사본은 아니므로 별도 장치 여부도 구분한다.
+현장 수동 백업·복구 PASS 다음에 전용 백업 계정을 준비하고, 비대화형 백업 실행을 검증한 뒤 Windows 작업 스케줄러를 구성한다. `Backup` 액션은 root 비밀번호를 두 번 입력하므로 그대로 예약하지 않는다. 아래 `BackupSaved` 액션의 현장 검증이 다음 단계다. 자동 예약·보관 정리·별도 장치 복사는 아직 포함하지 않는다. 다른 폴더가 같은 물리 디스크에 있다면 PC2 디스크 장애 대비 사본은 아니므로 별도 장치 여부도 구분한다.
 
 ### 다음 단계: 백업 전용 계정 준비
 
@@ -194,6 +194,38 @@ SHOW GRANTS FOR 'loop_backup'@'localhost';
 위 두 블록의 SHOW WARNINGS는 바로 앞 EXECUTE의 경고를 확인한다. 기존 네 권한의 과거 경고를 복구하는 명령은 아니다. 권한 적용 후 PC2 root 콘솔에서 `SHOW GRANTS FOR 'loop_backup'@'localhost';`와 `SHOW REPLICA STATUS\G`를 확인하고 앞 절의 백업 계정 소켓 접속 시험을 진행한다. PC2 읽기 전용은 유지한다.
 
 근거: [MySQL의 GRANT 준비 문장 지원](https://dev.mysql.com/doc/refman/8.4/en/sql-prepared-statements.html), [DB 권한 이름의 밑줄 이스케이프](https://dev.mysql.com/doc/refman/8.4/en/grant.html).
+
+### 저장된 백업 계정으로 비대화형 실행
+
+현장에서 PC2 `loop_backup@localhost` 접속, server_id=2, read_only/super_read_only=1/1, 22개 테이블 조회와 전체 덤프 권한 시험(`/dev/null` 출력) PASS를 확인했다. 양쪽 권한 7행과 복제 스레드·오류 없음도 확인했다. GRANT 시 `skip-name-resolve` 경고 1285가 나왔지만 실제 로컬 소켓 접속·조회·덤프 시험은 통과했으므로 이를 이유로 DB를 재시작하지 않는다. [같은 경고의 MySQL 보고](https://bugs.mysql.com/bug.php?id=97399), [로컬 소켓의 localhost 계정 매칭](https://dev.mysql.com/doc/refman/8.4/en/connection-access.html).
+
+다음 명령은 수정된 도구를 받은 뒤 **PC2의 동일 Windows 사용자**로 실행한다. 관리자나 SYSTEM 등 다른 계정으로 바꾸지 않는다.
+
+```powershell
+powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure/tools/mysql84-backup.ps1 -RepositoryPath C:/Users/user/telecom-security-project -Action SaveCredential
+```
+
+입력할 값은 PC1에서 생성한 **loop_backup 계정 비밀번호 한 번**이다. root 비밀번호는 저장하지 않는다. `PSCredential`을 Windows DPAPI로 암호화하여 `.secrets/backups/mysql84/pc2/credentials/loop_backup.clixml`에 저장한다. 폴더 상속 권한을 제거하고 현재 사용자와 SYSTEM만 접근하도록 설정한다. 기존 자격 증명은 덮어쓰지 않는다. 이 단계의 PASS는 암호화 저장 확인이며 실제 인증 성공은 다음 단계에서 확인한다. [Microsoft Export-Clixml의 Windows 사용자·컴퓨터 종속 암호화](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/export-clixml?view=powershell-5.1).
+
+이어서 실행한다. 이번에는 비밀번호 입력이 없어야 한다. 스키마 마이그레이션은 백업 동안 중지한다.
+
+```powershell
+powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File infrastructure/tools/mysql84-backup.ps1 -RepositoryPath C:/Users/user/telecom-security-project -Action BackupSaved
+```
+
+저장된 자격 증명을 복호화하고 현재 사용자/SYSTEM 전용 임시 폴더에서 옵션 파일을 만든다. 컨테이너 내부 권한 700 작업 폴더에 복사해 파일 권한 600을 확인하며 로컬 소켓·loop_backup·지정 옵션 파일을 사용한다. 로그인 경로 파일을 비활성화하고 비밀번호를 프로세스 인수에 넣지 않는다. 호스트 평문 파일은 복사 후 정리하고 컨테이너 옵션 파일도 성공·실패 시 정리한다. 잘못된 비밀번호나 권한·복제 상태 오류는 root 또는 대화형 인증으로 전환하지 않고 실패한다. 컨테이너 인증 파일 정리에 실패한 경우도 `backup-failed`로 기록한다.
+
+성공 기준은 `PASS: backup saved; ... base tables, SHA256 and completion marker checked.`와 `Stage: backup-ready`다. 수동 백업과 같은 데이터 복구용 manifest/SQL 형식을 사용한다. `.secrets`의 다른 과거 실행 폴더와 검증된 백업은 유지한다. SaveCredential·Backup·BackupSaved·RestoreTest는 파일 잠금으로 동시에 실행되지 않으며 Status는 상태 조회만 한다.
+
+새 백업의 격리 복구 시험을 진행한다.
+
+```powershell
+powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File infrastructure/tools/mysql84-backup.ps1 -RepositoryPath C:/Users/user/telecom-security-project -Action RestoreTest
+```
+
+최종 `restore-verified`까지 확인하면 예약 작업 등록으로 진행한다. **현재 자동 예약은 미등록**이다. 이후 예약 실행도 같은 PC·Windows 사용자로 해야 하며 PC와 Docker Desktop이 실행 중이어야 한다. 암호화 파일을 다른 PC에 복사해도 그곳에서 사용할 수 없다. 입력 실수로 BackupSaved 인증이 실패하면 비밀번호나 인증 파일을 공개하지 말고 실패 액션과 Status만 확인한다.
+
+Windows PowerShell 5.1 시험에서 실제 DPAPI 왕복·접근 권한, 따옴표·역슬래시·공백·제어 문자·유니코드의 옵션 파일 값 이스케이프, 비대화형 인수와 root 전환 없음, 임시 파일 정리 및 정리 실패, 저장 자격 증명 백업의 격리 복구 호환성, 중복 실행 차단을 검사한다. Docker/MySQL은 대역이며 실제 PC2의 BackupSaved·RestoreTest 결과는 후속 현장 검증 대상이다.
 
 ## 준비 확인 120초 시간 초과
 
