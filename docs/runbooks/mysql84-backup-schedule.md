@@ -54,6 +54,24 @@ last-success.json: success; ...
 
 등록 직후 아직 실행 전인 0x00041303은 이번 실행의 성공 코드가 아니다. Test가 시간 초과이면 작업이 계속 실행 중일 수 있으므로 다시 시작하지 말고 Status를 확인한다. 이미 Running인 작업에는 Test가 추가 실행을 요청하지 않는다.
 
+## RunLevel 속성 없음 오류 복구
+
+현장에서 Install의 작업 생성 이후 XML 검사 중 `RunLevel 속성을 찾을 수 없습니다`가 발생했다. 초기 검사 코드가 Windows XML에서 기본 권한 항목이 생략될 수 있는 경우를 처리하지 못한 오류다. 수정본은 선택 XML 노드를 안전하게 읽고 실제 CIM Principal.RunLevel이 Limited인지 함께 확인한다. 명시적인 HighestAvailable 또는 실제 Highest 권한은 계속 거부한다. MultipleInstancesPolicy 생략도 스키마 기본값 IgnoreNew로 처리하며 명시적인 다른 정책은 거부한다.
+
+기존 설치 폴더의 도구 복사본과 해시가 있으므로 TEMP 도구만 바꾸고 Install을 반복하면 고정 복사본은 갱신되지 않는다. 수정된 예약 도구를 받은 뒤 **PC2의 동일 Windows 사용자**로 Repair를 실행한다. 기존 예약·백업·자격 증명을 삭제하거나 초기화하지 않는다.
+
+```powershell
+powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "$env:TEMP/loop-mysql84-backup-schedule.ps1" -RepositoryPath 'C:/Users/user/telecom-security-project' -Action Repair
+```
+
+Repair는 기존 설치의 사용자·코드 해시와 작업 정의를 먼저 검사한다. 실행 중이면 종료를 기다리도록 안내하고 작업을 강제로 중지하지 않는다. 실행 중이 아니면 기존 예약을 비활성화하고 스케줄러 복사본과 해당 해시만 교체한 뒤 재검사·활성화한다. 실제 백업 도구, 암호화 계정, 백업 상태와 주기·트리거는 유지한다. 복사·해시 갱신 실패 시 원래 복사본을 복원하고 작업을 비활성 상태로 둔다.
+
+정상 메시지는 `PASS: scheduler worker repaired and the existing hourly task enabled. Next run Test.`다. 이후 위 Test 명령으로 실제 스케줄러 실행을 확인한다. 이 오류는 DB 백업이나 비밀번호 저장을 다시 수행할 이유가 아니다.
+
+Windows PowerShell 5.1 시험에서 실제 Windows COM 작업 정의를 등록 없이 메모리에서 직렬화한 XML과 기본 RunLevel/MultipleInstancesPolicy 생략 XML을 검사했다. 기존 복사본·해시를 가진 비활성 작업의 복구, 고정 경로 Status, 숨김 실행과 실제 권한 상승 거부를 확인했으며 예약 재등록·백업·암호화 계정 변경이 없는지도 검사했다.
+
+근거: [작업 XML 스키마의 선택 RunLevel과 MultipleInstancesPolicy 기본값](https://learn.microsoft.com/en-us/windows/win32/taskschd/task-scheduler-schema), [실제 Principal.RunLevel 권한 값](https://learn.microsoft.com/en-us/windows/win32/taskschd/principal-runlevel).
+
 ## 상태·로그와 운영 조건
 
 TEMP 파일이 없어져도 설치된 고정 경로에서 조회할 수 있다.
