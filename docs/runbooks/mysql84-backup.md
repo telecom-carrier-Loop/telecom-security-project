@@ -51,7 +51,7 @@ C:/Users/user/telecom-security-project/.secrets/backups/mysql84/pc2/
 powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure/tools/mysql84-backup.ps1 -RepositoryPath C:/Users/user/telecom-security-project -Action RestoreTest
 ```
 
-추가 root 입력 없이 별도 난수 비밀번호를 사용한다. 시험 비밀번호는 실행 폴더의 `restore-private`에만 보관하며 Docker 인수에는 비밀번호 파일 경로만 전달한다. 이 폴더를 공개하거나 Git에 추가하지 않는다.
+추가 root 입력 없이 별도 난수 비밀번호를 사용한다. 호스트에서는 실행 폴더의 `restore-private`에 보관하며 Docker 인수에는 비밀번호 파일 경로만 전달한다. MySQL 클라이언트 설정은 컨테이너 내부의 권한 600 복사본으로 사용한다. 이 폴더를 공개하거나 Git에 추가하지 않는다.
 
 도구는 다음 순서로 진행한다.
 
@@ -90,10 +90,18 @@ powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure
 
 수정본에서도 시간 초과가 나면 `Status`를 실행한다. 마지막 준비 확인 종료 코드와 시험 컨테이너의 상태·종료 코드·OOM 여부·시작 오류를 출력한다. 실제 서버 초기화 지연·자원 부족·접속 설정 문제는 이 정보로 구분해 추가 확인해야 한다. root 비밀번호나 원본 백업 SQL을 공유하지 않는다.
 
+### Windows 공유 설정 파일 무시: ERROR 1045 / using password: NO
+
+현장 진단에서 PID 1은 `mysqld`였지만 `/run/loop-restore/client.cnf` 권한이 `777`이었고, MySQL이 `World-writable config file ... is ignored`와 `Access denied ... (using password: NO)`를 출력했다. 비밀번호가 틀렸다는 증거가 아니라 설정 파일 자체를 읽지 않은 경우다.
+
+수정 도구는 읽기 전용 Windows 공유 파일을 변경하지 않는다. 대신 `/tmp/loop-restore-auth` 디렉터리를 권한 700으로 만들고 설정 파일을 복사해 권한 600을 적용·확인한다. 준비 확인·복원·테이블 검사 모두 이 컨테이너 내부 파일을 사용한다. 같은 백업과 기존 시험 컨테이너에서 수정된 `RestoreTest`만 재실행한다. root 비밀번호 변경이나 백업 재생성은 필요 없다.
+
 ## 도구 검증
 
-Windows PowerShell 5.1 Docker 대역 시험에서 잘못된/공유된 원본, 불건전 복제 검사, 덤프 실패·미완료·테이블 변경·GTID 혼입, SQL/manifest 변조, 라이브 볼륨 재사용, 포트 공개, 초기화·복원·테이블 검사·정상 종료 실패, 복구 재시도와 비밀번호 인수 노출을 검사한다. 실제 네이티브 실행 파일로 기존 따옴표 손실과 수정된 파일 경로 인수 보존을 확인하며, 시간 초과 이후 새 컨테이너를 만들지 않고 재개되는 것도 검사한다. 실제 Docker/MySQL 동작과 복구 결과는 현장 실행으로 확인해야 한다.
+Windows PowerShell 5.1 Docker 대역 시험에서 잘못된/공유된 원본, 불건전 복제 검사, 덤프 실패·미완료·테이블 변경·GTID 혼입, SQL/manifest 변조, 라이브 볼륨 재사용, 포트 공개, 초기화·복원·테이블 검사·정상 종료 실패, 복구 재시도와 비밀번호 인수 노출을 검사한다. 공유 설정 파일 권한 777을 모사해 내부 700/600 권한 설정·확인, 내용 보존, 모든 클라이언트의 내부 파일 사용, 권한 확인 실패 시 복원 차단을 검사한다. 실제 네이티브 실행 파일로 기존 따옴표 손실과 수정된 파일 경로 인수 보존을 확인하며, 시간 초과 이후 새 컨테이너를 만들지 않고 재개되는 것도 검사한다. 실제 Docker/MySQL 동작과 복구 결과는 현장 실행으로 확인해야 한다.
 
 참고: [MySQL mysqldump와 단일 트랜잭션·GTID 옵션](https://dev.mysql.com/doc/refman/8.4/en/mysqldump.html).
 
 참고: [PowerShell 네이티브 명령 인수와 따옴표 전달](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_parsing#passing-arguments-that-contain-quote-characters).
+
+참고: [MySQL의 쓰기 가능한 옵션 파일 무시 규칙](https://dev.mysql.com/doc/refman/8.4/en/option-files.html).
