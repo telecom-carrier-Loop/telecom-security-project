@@ -14,7 +14,7 @@ function New-Case([string]$Name) {
     $role=@{Stage='replica-ready';ProductionId='live';ImageId='sha256:fixed84';CloneVolume='live-data';SourceVolume='preserved-original';PrimaryUuid='98e409fb-a5c6-11f1-8bc1-9f1aa3e284ef'}
     [IO.File]::WriteAllText((Join-Path $rolePath 'state.json'),($role|ConvertTo-Json),$utf8)
     $live=[PSCustomObject]@{Id='live';Name='/mysql-lab';Image='sha256:fixed84';State=[PSCustomObject]@{Running=$true;ExitCode=0};Mounts=@([PSCustomObject]@{Type='volume';Name='live-data';Destination='/var/lib/mysql';RW=$true})}
-    $global:BackupMock=@{Containers=@{live=$live};Calls=[Collections.Generic.List[object]]::new();Sql=[Collections.Generic.List[object]]::new();Files=@{};Shared=$false;GuardFailure=$false;DumpFailure=$false;Incomplete=$false;Gtid=$false;WrongHeaders=$false;UnsafeMount=$false;PublishedPort=$false;NotReady=$false;RestoreFailure=$false;CheckFailure=$false;BadStop=$false}
+    $global:BackupMock=@{Containers=@{live=$live};Calls=[Collections.Generic.List[object]]::new();Sql=[Collections.Generic.List[object]]::new();Files=@{};Modes=@{};Shared=$false;GuardFailure=$false;DumpFailure=$false;Incomplete=$false;Gtid=$false;WrongHeaders=$false;UnsafeMount=$false;PublishedPort=$false;NotReady=$false;RestoreFailure=$false;CheckFailure=$false;BadStop=$false;BadClientMode=$false}
     $path
 }
 function global:Start-Sleep { param($Seconds) }
@@ -35,7 +35,18 @@ function global:docker {
             else { $m.Files[$c[2]]=[IO.File]::ReadAllText($c[1]) };return
         }
         'exec' {
-            if ($c -contains '-it' -and $c -contains 'sh') {
+            if ($c[1] -eq 'test' -and $c[2] -eq 'cp') {
+                $m.Files['test:'+$c[4]]=$m.Files['test:'+$c[3]]
+                $m.Modes['test:'+$c[4]]=$m.Modes['test:'+$c[3]]
+            }
+            elseif ($c[1] -eq 'test' -and $c[2] -eq 'chmod') {
+                Assert-Test (-not $c[4].StartsWith('/run/loop-restore/')) 'Cannot chmod the read-only Windows bind.'
+                $m.Modes['test:'+$c[4]]=$c[3]
+            }
+            elseif ($c[1] -eq 'test' -and $c[2] -eq 'stat') {
+                if ($m.BadClientMode) { '777' } else { $m.Modes['test:'+$c[-1]] }
+            }
+            elseif ($c -contains '-it' -and $c -contains 'sh') {
                 $sql=$m.Files['live:'+$c[-2]]
                 $m.Sql.Add([PSCustomObject]@{Id='live';Text=$sql})
                 if($m.GuardFailure) { $global:LASTEXITCODE=1;return }
@@ -55,10 +66,13 @@ function global:docker {
                 Assert-Test ($m.Files['test:/tmp/loop-restore-ready.sh'].Contains('test "$(cat /proc/1/comm)" = mysqld')) 'PID 1 guard missing.'
                 Assert-Test (-not $m.Files['test:/tmp/loop-restore-ready.sh'].Contains("`r")) 'Ready runner is not LF.'
                 Assert-Test ($m.Files['test:/tmp/loop-restore-ready.sql'] -ceq "SELECT VERSION(),@@GLOBAL.server_id;`n") 'Readiness SQL changed.'
+                Assert-Test ($m.Files['test:/tmp/loop-restore-ready.sh'].Contains('--defaults-extra-file=/tmp/loop-restore-auth/client.cnf')) 'MySQL still uses a world-writable Windows option file.'
+                Assert-Test ($m.Modes['test:/tmp/loop-restore-auth/client.cnf'] -eq '600' -and $m.Modes['test:/tmp/loop-restore-auth'] -eq '700') 'Private client permissions were not enforced.'
                 if($m.NotReady) { $global:LASTEXITCODE=1;return }
                 "8.4.11`t9032"
             }
             elseif($c[1] -eq 'test' -and $c -contains '/tmp/loop-restore-file.sh') {
+                Assert-Test ($m.Files['test:/tmp/loop-restore-file.sh'].Contains('--defaults-extra-file=/tmp/loop-restore-auth/client.cnf')) 'Restore/check still uses the ignored bind config.'
                 $sql=$m.Files['test:'+$c[-1]]
                 $m.Sql.Add([PSCustomObject]@{Id='test';Text=$sql})
                 if($m.RestoreFailure -and $c[-1] -eq '/tmp/loop-restore-snapshot.sql') { $global:LASTEXITCODE=1;return }
@@ -77,6 +91,10 @@ function global:docker {
             if($m.UnsafeMount) { $volume='live-data' }
             $imageIndex=[array]::IndexOf($c,'sha256:fixed84')
             $ports=$null;if($m.PublishedPort) { $ports=[PSCustomObject]@{'3306/tcp'=@{HostPort='3307'}} }
+            $bind=@($c | Where-Object { $_ -like 'type=bind,*' })[0]
+            $secrets=($bind -split ',source=',2)[1].Split(',')[0]
+            $m.Files['test:/run/loop-restore/client.cnf']=[IO.File]::ReadAllText((Join-Path $secrets 'client.cnf'))
+            $m.Modes['test:/run/loop-restore/client.cnf']='777'
             $m.Containers.test=[PSCustomObject]@{
                 Id='test';Name=('/'+$name);Image='sha256:fixed84';State=[PSCustomObject]@{Running=$false;ExitCode=0}
                 Config=[PSCustomObject]@{Cmd=@($c[($imageIndex+1)..($c.Count-1)])}
@@ -157,15 +175,17 @@ public static class LoopNativeArgvProbe {
     }
     Write-Host 'PASS: original/live volume and exposed restore port rejected before start'
 
-    foreach($failure in @('NotReady','RestoreFailure','CheckFailure','BadStop')) {
+    foreach($failure in @('NotReady','RestoreFailure','CheckFailure','BadStop','BadClientMode')) {
         $p=New-Case $failure;Run-Step $p Backup;$global:BackupMock[$failure]=$true
         $message='Docker exec failed'
         if($failure -eq 'NotReady') { $message='did not become ready' }
         if($failure -eq 'CheckFailure') { $message='table check' }
         if($failure -eq 'BadStop') { $message='shutdown was not clean' }
+        if($failure -eq 'BadClientMode') { $message='must have mode 600' }
         Expect-Failure $p RestoreTest $message
         $state=Read-State $p
         Assert-Test ($state.Stage -ne 'restore-verified' -and $global:BackupMock.Containers.live.State.Running) 'Failed drill claimed success or stopped live DB.'
+        if ($failure -eq 'BadClientMode') { Assert-Test (@($global:BackupMock.Sql | Where-Object Id -eq 'test').Count -eq 0) 'Insecure client mode reached restore SQL.' }
         if ($failure -eq 'NotReady') {
             Assert-Test ($state.ReadyProbeExitCode -eq 1) 'Readiness failure code was discarded.'
             $global:BackupMock.NotReady=$false
@@ -184,6 +204,8 @@ public static class LoopNativeArgvProbe {
     $state=Read-State $p
     Assert-Test ($state.Stage -eq 'restore-verified' -and $global:BackupMock.Containers.live.State.Running -and -not $global:BackupMock.Containers.test.State.Running) 'Successful drill state or original protection failed.'
     Assert-Test ((Test-Path (Join-Path $state.Directory 'restore-report.txt'))) 'Recovery report missing.'
+    Assert-Test ($global:BackupMock.Modes['test:/run/loop-restore/client.cnf'] -eq '777' -and $global:BackupMock.Modes['test:/tmp/loop-restore-auth/client.cnf'] -eq '600') 'Windows bind handling or local permissions incorrect.'
+    Assert-Test ($global:BackupMock.Files['test:/run/loop-restore/client.cnf'] -ceq $global:BackupMock.Files['test:/tmp/loop-restore-auth/client.cnf']) 'Private copy changed test credentials.'
     foreach($call in $global:BackupMock.Calls) {
         Assert-Test ($call[0] -notin @('rm','pull','rename')) 'Unexpected destructive/image-changing operation.'
         if($call[0] -eq 'stop') { Assert-Test ($call[-1] -eq 'test') 'Live container stopped.' }
