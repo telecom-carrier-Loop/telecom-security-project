@@ -96,6 +96,14 @@ powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure
 
 수정 도구는 읽기 전용 Windows 공유 파일을 변경하지 않는다. 대신 `/tmp/loop-restore-auth` 디렉터리를 권한 700으로 만들고 설정 파일을 복사해 권한 600을 적용·확인한다. 준비 확인·복원·테이블 검사 모두 이 컨테이너 내부 파일을 사용한다. 같은 백업과 기존 시험 컨테이너에서 수정된 `RestoreTest`만 재실행한다. root 비밀번호 변경이나 백업 재생성은 필요 없다.
 
+### 복원 이후 테이블 검사 또는 행 수 판정 실패
+
+준비 확인과 SQL 복원 명령을 통과한 뒤 `Restored table check or row count failed`가 나오면 검사 결과 판정 단계에서 실패한 것이다. 초기 도구는 `CONCAT(...,CHAR(9),COUNT(1))`의 한 필드 안에 탭을 넣었는데, MySQL `--batch`는 필드 내부 탭을 실제 탭 대신 `\t`로 이스케이프하므로 행 수 정규식이 맞지 않았다.
+
+수정본은 마커와 행 수를 별도 SQL 열로 조회하여 배치 출력의 열 구분자를 사용한다. `CHECK TABLE OK` 및 테이블별 유일한 숫자 행 수 검사는 유지한다. 검사 전 `restore-report.txt`를 저장하며, 실제 테이블 검사 실패와 행 수 형식 실패를 테이블명과 함께 구분해서 출력한다.
+
+수정된 도구로 기존 백업의 `RestoreTest`만 재실행한다. 이전 SQL 복원 명령이 성공했어도 최종 검사를 통과하기 전에는 복구 시험 완료로 취급하지 않는다. 재실행에서도 실패하면 해당 오류와 `Status`를 확인하고, 원본 백업이나 라이브 DB를 초기화하지 않는다.
+
 ## 도구 검증
 
 Windows PowerShell 5.1 Docker 대역 시험에서 잘못된/공유된 원본, 불건전 복제 검사, 덤프 실패·미완료·테이블 변경·GTID 혼입, SQL/manifest 변조, 라이브 볼륨 재사용, 포트 공개, 초기화·복원·테이블 검사·정상 종료 실패, 복구 재시도와 비밀번호 인수 노출을 검사한다. 공유 설정 파일 권한 777을 모사해 내부 700/600 권한 설정·확인, 내용 보존, 모든 클라이언트의 내부 파일 사용, 권한 확인 실패 시 복원 차단을 검사한다. 실제 네이티브 실행 파일로 기존 따옴표 손실과 수정된 파일 경로 인수 보존을 확인하며, 시간 초과 이후 새 컨테이너를 만들지 않고 재개되는 것도 검사한다. 실제 Docker/MySQL 동작과 복구 결과는 현장 실행으로 확인해야 한다.
@@ -105,3 +113,5 @@ Windows PowerShell 5.1 Docker 대역 시험에서 잘못된/공유된 원본, �
 참고: [PowerShell 네이티브 명령 인수와 따옴표 전달](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_parsing#passing-arguments-that-contain-quote-characters).
 
 참고: [MySQL의 쓰기 가능한 옵션 파일 무시 규칙](https://dev.mysql.com/doc/refman/8.4/en/option-files.html).
+
+참고: [MySQL 배치 출력의 필드 내부 문자 이스케이프](https://dev.mysql.com/doc/refman/8.4/en/mysql-command-options.html).
