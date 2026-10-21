@@ -12,6 +12,7 @@ $latest = Join-Path $root 'latest.json'
 $utf8 = [Text.UTF8Encoding]::new($false)
 $pc2Uuid = 'f1868a2a-a5a5-11f1-8815-9693e922f083'
 $testArguments = @('--server-id=9032', '--event-scheduler=OFF', '--skip-replica-start=ON', '--innodb-buffer-pool-size=128M')
+$script:BackupDockerExitCode = 0
 
 function Invoke-BackupDocker([string[]]$Arguments, [switch]$AllowFailure) {
     $previous = $ErrorActionPreference
@@ -21,6 +22,7 @@ function Invoke-BackupDocker([string[]]$Arguments, [switch]$AllowFailure) {
         else { $lines = @(& docker @Arguments 2>&1); $code = $LASTEXITCODE }
     }
     finally { $ErrorActionPreference = $previous }
+    $script:BackupDockerExitCode = $code
     if ($code -ne 0) {
         if ($AllowFailure) { return }
         throw ('Docker ' + $Arguments[0] + ' failed. Keep backup files; run Status. Do not restore into mysql-lab.')
@@ -80,7 +82,8 @@ if ($Action -eq 'Status') {
     $state = Get-Content -LiteralPath $latest -Raw | ConvertFrom-Json
     Write-Host ('Stage: ' + $state.Stage)
     Write-Host ('Backup directory: ' + $state.Directory)
-    if ($state.TestId) { Invoke-BackupDocker @('inspect', '--format', 'name={{.Name}} status={{.State.Status}} exit={{.State.ExitCode}}', $state.TestId) }
+    if ($null -ne $state.PSObject.Properties['ReadyProbeExitCode']) { Write-Host ('Last readiness exit code: ' + $state.ReadyProbeExitCode) }
+    if ($state.TestId) { Invoke-BackupDocker @('inspect', '--format', 'name={{.Name}} status={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} error={{json .State.Error}}', $state.TestId) }
     exit 0
 }
 $sourceInfo = Get-BackupSource
@@ -185,17 +188,30 @@ $safeToStop = $true
 try {
     if (-not $test.State.Running) { $null = Invoke-BackupDocker @('start', $state.TestId) }
     Save-BackupState 'test-running'
+    # Windows PowerShell 5.1 strips embedded native argument quotes. Keep shell/SQL in LF files.
+    $readyScript = Join-Path $state.Directory 'restore-ready.sh'
+    $readySql = Join-Path $state.Directory 'restore-ready.sql'
+    Write-BackupText $readyScript @'
+#!/bin/sh
+set -eu
+test "$(cat /proc/1/comm)" = mysqld
+mysql --defaults-extra-file=/run/loop-restore/client.cnf --batch --skip-column-names < "$1"
+'@
+    Write-BackupText $readySql "SELECT VERSION(),@@GLOBAL.server_id;`n"
+    $null = Invoke-BackupDocker @('cp', $readyScript, ($state.TestId + ':/tmp/loop-restore-ready.sh'))
+    $null = Invoke-BackupDocker @('cp', $readySql, ($state.TestId + ':/tmp/loop-restore-ready.sql'))
     $ready = $false
     for ($attempt=0; $attempt -lt 24; $attempt++) {
         $test = Get-BackupContainer $state.TestId
         Assert-TestContainer $test
         if (-not $test.State.Running) { throw 'Restore-test container stopped during initialization. Run Status.' }
-        $rows = @(Invoke-BackupDocker -Arguments @('exec', $state.TestId, 'sh', '-c', 'test "$(cat /proc/1/comm)" = mysqld && mysql --defaults-extra-file=/run/loop-restore/client.cnf --batch --skip-column-names --execute="SELECT VERSION(),@@GLOBAL.server_id;"') -AllowFailure)
+        $rows = @(Invoke-BackupDocker -Arguments @('exec', $state.TestId, 'sh', '/tmp/loop-restore-ready.sh', '/tmp/loop-restore-ready.sql') -AllowFailure)
+        $state | Add-Member -NotePropertyName ReadyProbeExitCode -NotePropertyValue $script:BackupDockerExitCode -Force
         if (@($rows | Where-Object { $_ -ceq "8.4.11`t9032" }).Count -eq 1) { $ready=$true; break }
         if ($attempt % 4 -eq 0) { Write-Host 'Waiting for the isolated MySQL restore-test server...' }
         Start-Sleep -Seconds 5
     }
-    if (-not $ready) { throw 'Isolated MySQL did not become ready within 120 seconds. Run Status.' }
+    if (-not $ready) { throw ('Isolated MySQL did not become ready within 120 seconds. Last readiness exit code: ' + $state.ReadyProbeExitCode + '. Run Status.') }
     $identityGuard = @"
 SET @loop_guard=IF(VERSION()='8.4.11' AND @@GLOBAL.server_id=9032
     AND @@GLOBAL.server_uuid<>'$pc2Uuid' AND @@GLOBAL.server_uuid<>'$($sourceInfo.Role.PrimaryUuid)'
