@@ -188,6 +188,14 @@ $safeToStop = $true
 try {
     if (-not $test.State.Running) { $null = Invoke-BackupDocker @('start', $state.TestId) }
     Save-BackupState 'test-running'
+    # Windows bind mounts can expose mode 0777; MySQL ignores world-writable option files.
+    # Copy into the container filesystem and enforce permissions there, never on the host bind.
+    $null = Invoke-BackupDocker @('exec', $state.TestId, 'mkdir', '-p', '/tmp/loop-restore-auth')
+    $null = Invoke-BackupDocker @('exec', $state.TestId, 'chmod', '700', '/tmp/loop-restore-auth')
+    $null = Invoke-BackupDocker @('exec', $state.TestId, 'cp', '/run/loop-restore/client.cnf', '/tmp/loop-restore-auth/client.cnf')
+    $null = Invoke-BackupDocker @('exec', $state.TestId, 'chmod', '600', '/tmp/loop-restore-auth/client.cnf')
+    $clientMode = @(Invoke-BackupDocker @('exec', $state.TestId, 'stat', '-c', '%a', '/tmp/loop-restore-auth/client.cnf'))
+    if ($clientMode.Count -ne 1 -or $clientMode[0] -cne '600') { throw 'Container-local restore client config must have mode 600. No restore SQL was executed.' }
     # Windows PowerShell 5.1 strips embedded native argument quotes. Keep shell/SQL in LF files.
     $readyScript = Join-Path $state.Directory 'restore-ready.sh'
     $readySql = Join-Path $state.Directory 'restore-ready.sql'
@@ -195,7 +203,7 @@ try {
 #!/bin/sh
 set -eu
 test "$(cat /proc/1/comm)" = mysqld
-mysql --defaults-extra-file=/run/loop-restore/client.cnf --batch --skip-column-names < "$1"
+mysql --defaults-extra-file=/tmp/loop-restore-auth/client.cnf --batch --skip-column-names < "$1"
 '@
     Write-BackupText $readySql "SELECT VERSION(),@@GLOBAL.server_id;`n"
     $null = Invoke-BackupDocker @('cp', $readyScript, ($state.TestId + ':/tmp/loop-restore-ready.sh'))
@@ -224,7 +232,7 @@ DEALLOCATE PREPARE loop_guard_statement;
     $guardFile = Join-Path $state.Directory 'restore-guard.sql'
     Write-BackupText $guardFile ($identityGuard + "`nDROP DATABASE IF EXISTS my_new_board_db;")
     $runner = Join-Path $state.Directory 'restore-file.sh'
-    Write-BackupText $runner "#!/bin/sh`nset -eu`nmysql --defaults-extra-file=/run/loop-restore/client.cnf --batch --skip-column-names < `"`$1`"`n"
+    Write-BackupText $runner "#!/bin/sh`nset -eu`nmysql --defaults-extra-file=/tmp/loop-restore-auth/client.cnf --batch --skip-column-names < `"`$1`"`n"
     $null = Invoke-BackupDocker @('cp', $runner, ($state.TestId + ':/tmp/loop-restore-file.sh'))
     $null = Invoke-BackupDocker @('cp', $guardFile, ($state.TestId + ':/tmp/loop-restore-guard.sql'))
     $null = Invoke-BackupDocker @('cp', (Join-Path $state.Directory 'snapshot.sql'), ($state.TestId + ':/tmp/loop-restore-snapshot.sql'))
