@@ -2,7 +2,7 @@
 
 ## 적용 상태와 범위
 
-2026-10-21 PC1 `flask_mysql` → PC2 `mysql-lab`의 TLS·GTID 복제 연결과 PC2 읽기 전용 설정을 확인했다. 검증 테이블의 행 추가·컬럼 추가·수정·삭제가 PC2에 반영된 현장 결과도 확인했다. 다음 단계는 실제 SQL 백업과 격리 복원이다.
+2026-10-21 PC1 `flask_mysql` → PC2 `mysql-lab`의 TLS·GTID 복제 연결과 PC2 읽기 전용 설정을 확인했다. 검증 테이블의 행 추가·컬럼 추가·수정·삭제가 PC2에 반영된 현장 결과도 확인했다. 이후 현장 수동 백업과 격리 복구 시험에서 22개 테이블 CHECK TABLE OK, 행 수 보고서 저장, `restore-verified`, 시험 컨테이너 정상 종료까지 확인했다. 사용자는 백업을 다른 위치에도 보관했다.
 
 `infrastructure/tools/mysql84-backup.ps1`은 **PC2에서** 실행한다. `.secrets/mysql84-replication/pc2/state.json`의 `replica-ready` 상태와 실제 이미지·컨테이너·볼륨을 확인한다. 라이브 DB 복원이나 자동 장애 전환 도구가 아니다. 기존 원본·복제 DB는 유지한다.
 
@@ -80,7 +80,89 @@ powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure
 
 ## 이후 작업
 
-현장 수동 백업·복구 PASS 다음에 전용 백업 계정, 실제 백업 저장 장치, 실행 주기·보관 기간을 정하고 Windows 작업 스케줄러를 구성한다. 현재는 수동 실행이며 자동 예약·보관 정리·별도 장치 복사는 포함하지 않는다. `.secrets`의 같은 디스크 백업만으로 PC2 디스크 장애를 대비할 수 없으므로 별도 장치 보관도 다음 단계에서 검증한다.
+현장 수동 백업·복구 PASS 다음에 전용 백업 계정을 준비하고, 비대화형 백업 실행을 검증한 뒤 Windows 작업 스케줄러를 구성한다. 현재 도구는 root 비밀번호를 두 번 입력하므로 그대로 예약하지 않는다. 자동 예약·보관 정리·별도 장치 복사는 아직 포함하지 않는다. 다른 폴더가 같은 물리 디스크에 있다면 PC2 디스크 장애 대비 사본은 아니므로 별도 장치 여부도 구분한다.
+
+### 다음 단계: 백업 전용 계정 준비
+
+PC2의 `super_read_only`는 유지한다. PC1에서 새 계정을 생성하고 현재 복제 경로로 PC2에 반영한다. 계정 관리 문장은 statement 형식으로 기록되고 현재 데이터베이스를 기준으로 필터링하므로 **같은 세션에서 `USE my_new_board_db`를 먼저 실행**한다. 여기서 계정은 두 PC 모두에 생기며 컨테이너 내부 로컬 소켓으로만 사용할 `loop_backup@localhost`다. Flask 계정이나 복제 계정으로 사용하지 않는다.
+
+1. PC1 PowerShell에서 `docker exec -it flask_mysql mysql --user=root --password`, PC2 PowerShell에서 `docker exec -it mysql-lab mysql --user=root --password`로 각각 접속한다. 각 PC의 root 비밀번호를 입력한다. 두 MySQL 콘솔에서 다음 조회를 실행한다.
+
+```sql
+SELECT @@server_id AS server_id,
+       @@read_only AS read_only,
+       @@super_read_only AS super_read_only,
+       @@partial_revokes AS partial_revokes;
+SELECT COUNT(1) AS existing_backup_accounts
+FROM mysql.user WHERE User = 'loop_backup';
+```
+
+PC1은 `1 / 0 / 0 / 0`, PC2는 `2 / 1 / 1 / 0`, 계정 수는 양쪽 모두 0이어야 한다. 기존 계정이 있거나 역할·partial_revokes 설정이 다르면 아래 생성 명령을 실행하지 말고 결과를 먼저 확인한다. PC2에서 `SHOW REPLICA STATUS\G`도 확인하여 IO/SQL Running=Yes, Last IO/SQL Errno=0이어야 한다. 두 PC에서 다른 관리자가 같은 계정을 동시에 만들지 않는다.
+
+2. 조건을 만족하면 **PC1 MySQL 콘솔에서만** 실행한다. `sql_log_bin` 조회는 1이어야 한다. 0이면 여기서 중단한다.
+
+```sql
+USE my_new_board_db;
+SELECT @@SESSION.sql_log_bin AS session_binlog;
+```
+
+이어서 실행한다. 첫 명령이 반환하는 `Generated password`를 비공개로 보관하고, 오류가 나면 이후 명령을 중단한다. 생성 결과에는 비밀번호가 있으므로 화면이나 출력 전체를 공유하지 않는다.
+
+```sql
+CREATE USER 'loop_backup'@'localhost'
+  IDENTIFIED WITH caching_sha2_password BY RANDOM PASSWORD
+  PASSWORD EXPIRE NEVER;
+GRANT SELECT, SHOW VIEW, TRIGGER, EVENT
+  ON `my\_new\_board\_db`.* TO 'loop_backup'@'localhost';
+GRANT SHOW_ROUTINE ON *.* TO 'loop_backup'@'localhost';
+GRANT SELECT ON performance_schema.replication_connection_status
+  TO 'loop_backup'@'localhost';
+GRANT SELECT ON performance_schema.replication_applier_status
+  TO 'loop_backup'@'localhost';
+GRANT SELECT ON performance_schema.replication_applier_status_by_worker
+  TO 'loop_backup'@'localhost';
+GRANT SELECT ON performance_schema.replication_applier_status_by_coordinator
+  TO 'loop_backup'@'localhost';
+```
+
+앱 DB 덤프와 복제 건강 상태 조회에 필요한 권한을 부여한다. DB 이름의 밑줄은 이스케이프하여 다른 이름에 대한 와일드카드 권한 부여를 막는다(partial_revokes=0 전제). SHOW_ROUTINE은 전체 저장 루틴 정의를 볼 수 있는 전역 권한이다. EVENT/TRIGGER는 백업에 필요하지만 객체 관리 권한도 포함하므로 이 계정을 순수 SELECT 전용이라고 부르지 않는다. 테이블 행 변경·복제 제어·서버 변수 변경·계정 관리 권한은 부여하지 않는다. FLUSH PRIVILEGES는 필요 없다.
+
+3. PC2의 기존 root MySQL 콘솔에서 실행한다. 계정 반영이 아직 보이지 않으면 잠시 뒤 조회만 다시 실행한다. PC2에서 계정을 따로 생성하거나 읽기 전용을 해제하지 않는다.
+
+```sql
+SELECT User, Host, plugin
+FROM mysql.user WHERE User = 'loop_backup';
+SHOW GRANTS FOR 'loop_backup'@'localhost';
+SELECT @@read_only AS read_only, @@super_read_only AS super_read_only;
+SHOW REPLICA STATUS\G
+exit;
+```
+
+`loop_backup / localhost / caching_sha2_password`, 위 권한들, 읽기 전용 `1 / 1`, 복제 IO/SQL Running=Yes 및 오류 번호 0을 확인한다. 복제 오류가 나면 계정 생성 전체를 재실행하거나 트랜잭션을 건너뛰지 않는다.
+
+4. PC2 PowerShell에서 새 계정으로 실제 로컬 소켓 접속을 확인한다. 비밀번호는 PC1에서 생성된 백업 계정 비밀번호다.
+
+```powershell
+docker exec -it mysql-lab mysql --protocol=SOCKET --user=loop_backup --password --database=my_new_board_db
+```
+
+접속 후 실행한다.
+
+```sql
+SELECT CURRENT_USER() AS backup_account,
+       @@server_id AS server_id,
+       @@read_only AS read_only,
+       @@super_read_only AS super_read_only;
+SELECT COUNT(1) AS table_count
+FROM information_schema.TABLES
+WHERE TABLE_SCHEMA = 'my_new_board_db' AND TABLE_TYPE = 'BASE TABLE';
+SHOW GRANTS;
+exit;
+```
+
+기대값은 `loop_backup@localhost / 2 / 1 / 1`, 현재 스키마 기준 22개 테이블이다. 이후 스키마가 바뀌면 개수도 달라진다. **이 단계는 계정 준비까지만 완료하며 자동 백업 완료가 아니다.** 이후 비대화형 실행·종료 코드·결과 파일 검증을 통과한 도구를 PC2의 동일 Windows 사용자로 예약한다. Docker Desktop과 PC가 실행 중이어야 하며 절전·로그아웃 시 실행 가능 여부도 검증한다.
+
+근거: [계정·권한 문장의 복제](https://dev.mysql.com/doc/refman/8.4/en/replication-features-mysqldb.html), [statement 형식의 기본 DB 필터](https://dev.mysql.com/doc/refman/8.4/en/replication-rules-db-options.html), [난수 비밀번호 생성](https://dev.mysql.com/doc/refman/8.4/en/create-user.html), [SHOW_ROUTINE으로 저장 루틴 백업](https://dev.mysql.com/doc/refman/8.4/en/privileges-provided.html#priv_show-routine).
 
 ## 준비 확인 120초 시간 초과
 
