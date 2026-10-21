@@ -4,7 +4,7 @@
 
 PC1 flask_mysql(192.168.3.18) → PC2 mysql-lab(192.168.3.19) TLS·GTID 복제와 PC2 읽기 전용을 유지한다. 현장에서 암호화 자격 증명 저장, BackupSaved의 비대화형 백업, 새 백업의 22개 테이블 격리 복구 PASS를 확인했다. 이후 Repair로 기존 예약을 활성화하고 Test에서 **실제 Windows 작업 스케줄러를 통한 새 백업 생성**도 확인했다.
 
-2026-10-21 현장 결과는 Task state=Ready, Last task result=0x00000000, last-run/last-success=success이며 완료 시각은 15:23:38 KST(상태 원문의 06:23:38Z)다. 화면의 다음 정기 실행은 같은 날 16:14:14 KST였다. 이 결과는 Test의 즉시 실행 성공이며 이후 시간 트리거 실행은 해당 시각이 지난 뒤 Status에서 새 실행 시각으로 구분해 확인한다. 사용자 보관 범위는 2026-10-20~2026-11-12이며 별도 저장장치는 없다. 기존 1시간 주기와 자동 삭제 없는 누적 보관을 유지한다.
+2026-10-21 현장 결과에서 Test의 즉시 실행은 15:23:38 KST에 성공했다. 이후 첫 시간 트리거 실행도 16:14:15~16:14:17 KST(상태 원문의 07:14:15Z~07:14:17Z)에 새 백업을 만들고 성공했다. 두 번째 화면의 Task state=Ready, Last task result=0x00000000, last-run/last-success=success, 다음 실행 17:14:14 KST를 확인했다. 따라서 실제 1시간 예약 실행 성공까지 검증됐다. 사용자 보관 범위는 2026-10-20~2026-11-12이며 별도 저장장치는 없다. 기존 1시간 주기와 자동 삭제 없는 누적 보관을 유지한다.
 
 ## 설치와 실행 검증
 
@@ -84,7 +84,7 @@ powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -Fil
 
 Status는 다음 실행 시각, 스케줄러 종료 코드, 최근 실행·마지막 성공의 시각과 백업 경로, 비공개 로그 경로를 표시한다. 실패가 나도 last-success.json은 이전 성공을 유지한다. 상태 JSON은 원자적으로 교체하므로 실행 중 조회에서 부분 JSON을 읽지 않게 한다. 코드 해시나 작업 정의가 달라지면 실행·재등록을 중단한다.
 
-첫 정기 실행 확인은 화면에 표시된 Next run 시각 이후 **Status만** 실행한다. last-run/last-success의 StartedUtc가 기존 06:23:37Z 이후로 갱신됐고 success, Last task result=0인지 확인한다. 이미 완료한 Test나 Repair를 반복해 정기 실행과 혼동하지 않는다. 그다음 지정된 보관 범위를 수용할 현재 디스크 용량을 확인한다.
+첫 정기 실행은 2026-10-21 16:14 KST에 확인했다. 이후 주기 점검에서는 Next run 시각 이후 **Status만** 실행해 last-run/last-success의 StartedUtc가 직전 실행보다 새롭고 success, Last task result=0인지 확인한다. 이미 완료한 Test나 Repair를 반복해 정기 실행과 혼동하지 않는다. 지정된 보관 범위를 수용할 현재 디스크 용량도 함께 확인한다.
 
 PC가 켜져 있고 절전 상태가 아니며 **기존 Windows 사용자가 로그인한 상태**여야 한다. 화면 잠금과 로그아웃은 다르다. 로그아웃·전원 종료 동안 이 구성으로 백업을 보장할 수 없으며 Docker Desktop과 MySQL도 실행 중이어야 한다. 로그아웃 상태의 서버 운영은 별도 서비스 구성이 필요하다.
 
