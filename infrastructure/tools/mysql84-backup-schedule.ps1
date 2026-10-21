@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$RepositoryPath,
-    [ValidateSet('Install', 'Run', 'Test', 'Status')][string]$Action = 'Status',
+    [ValidateSet('Install', 'Repair', 'Run', 'Test', 'Status')][string]$Action = 'Status',
     [string]$BackupToolPath
 )
 $ErrorActionPreference = 'Stop'
@@ -66,7 +66,13 @@ function Assert-ScheduleTask {
     $triggers = $xml.SelectNodes('/t:Task/t:Triggers/*', $ns)
     $settings = $xml.SelectSingleNode('/t:Task/t:Settings', $ns)
     $duration = $xml.SelectSingleNode('/t:Task/t:Triggers/t:TimeTrigger/t:Repetition/t:Duration', $ns)
-    if ($registeredSid -ne $sid -or $principal.LogonType -ne 'InteractiveToken' -or $principal.RunLevel -ne 'LeastPrivilege' -or $exec.Count -ne 1 -or $exec[0].Command -ne $powershell -or $exec[0].Arguments -cne (Get-WorkerArguments) -or $exec[0].WorkingDirectory -ne $repo -or $triggers.Count -ne 1 -or $triggers[0].LocalName -ne 'TimeTrigger' -or [Xml.XmlConvert]::ToTimeSpan($triggers[0].Repetition.Interval).TotalHours -ne 1 -or $null -ne $duration -or $settings.MultipleInstancesPolicy -ne 'IgnoreNew' -or [Xml.XmlConvert]::ToTimeSpan($settings.ExecutionTimeLimit).TotalMinutes -ne 10 -or $settings.StartWhenAvailable -ne 'true') {
+    # Export-ScheduledTask can omit defaults. Check the effective CIM run level as well.
+    $effective = Get-ScheduledTask -TaskName $taskName -TaskPath '\'
+    $runLevel = $xml.SelectSingleNode('/t:Task/t:Principals/t:Principal/t:RunLevel', $ns)
+    $instances = $xml.SelectSingleNode('/t:Task/t:Settings/t:MultipleInstancesPolicy', $ns)
+    $instancesPolicy = 'IgnoreNew'
+    if ($null -ne $instances) { $instancesPolicy = $instances.InnerText }
+    if ($registeredSid -ne $sid -or $principal.LogonType -ne 'InteractiveToken' -or [string]$effective.Principal.RunLevel -ne 'Limited' -or ($null -ne $runLevel -and $runLevel.InnerText -ne 'LeastPrivilege') -or $exec.Count -ne 1 -or $exec[0].Command -ne $powershell -or $exec[0].Arguments -cne (Get-WorkerArguments) -or $exec[0].WorkingDirectory -ne $repo -or $triggers.Count -ne 1 -or $triggers[0].LocalName -ne 'TimeTrigger' -or [Xml.XmlConvert]::ToTimeSpan($triggers[0].Repetition.Interval).TotalHours -ne 1 -or $null -ne $duration -or $instancesPolicy -ne 'IgnoreNew' -or [Xml.XmlConvert]::ToTimeSpan($settings.ExecutionTimeLimit).TotalMinutes -ne 10 -or $settings.StartWhenAvailable -ne 'true') {
         throw 'Registered task differs from the hourly/current-user/limited backup definition. No task was started or replaced.'
     }
 }
@@ -129,6 +135,39 @@ if ($Action -eq 'Install') {
 }
 
 $config = Read-ScheduleConfig
+if ($Action -eq 'Repair') {
+    Assert-ScheduleTask
+    $task = Get-ScheduledTask -TaskName $taskName -TaskPath '\'
+    if ($task.State -eq 'Running') { throw 'Task is running. Wait for completion before Repair; it will not be stopped.' }
+    $null = Disable-ScheduledTask -TaskName $taskName -TaskPath '\'
+    if ((Get-ScheduledTask -TaskName $taskName -TaskPath '\').State -eq 'Running') { throw 'Task started during repair preparation. Wait for completion; it will not be stopped.' }
+    $newHash = (Get-FileHash -LiteralPath $PSCommandPath).Hash
+    if ($newHash -ine $config.WorkerSha256) {
+        $previousBytes = [IO.File]::ReadAllBytes($workerFile)
+        $previousHash = $config.WorkerSha256
+        $replacement = Join-Path $root ('worker-repair-' + [guid]::NewGuid().ToString('N') + '.tmp')
+        try {
+            Copy-Item -LiteralPath $PSCommandPath -Destination $replacement
+            [IO.File]::Replace($replacement, $workerFile, [NullString]::Value)
+            $config.WorkerSha256 = $newHash
+            Write-ScheduleJson $configFile $config
+            $null = Read-ScheduleConfig
+        }
+        catch {
+            [IO.File]::WriteAllBytes($replacement, $previousBytes)
+            [IO.File]::Replace($replacement, $workerFile, [NullString]::Value)
+            $config.WorkerSha256 = $previousHash
+            Write-ScheduleJson $configFile $config
+            throw 'Worker repair failed and the original snapshot was restored. Task remains disabled; inspect Status.'
+        }
+        finally { if (Test-Path -LiteralPath $replacement) { Remove-Item -LiteralPath $replacement -Force } }
+    }
+    Assert-ScheduleTask
+    $null = Enable-ScheduledTask -TaskName $taskName -TaskPath '\'
+    Write-Host 'PASS: scheduler worker repaired and the existing hourly task enabled. Next run Test.'
+    Show-ScheduleStatus
+    exit 0
+}
 if ($Action -eq 'Status') { Show-ScheduleStatus; exit 0 }
 if ($Action -eq 'Test') {
     Assert-ScheduleTask

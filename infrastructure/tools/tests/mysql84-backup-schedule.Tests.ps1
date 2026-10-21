@@ -64,10 +64,11 @@ function global:Register-ScheduledTask { [CmdletBinding()]param($TaskName,$TaskP
     $m.Xml=@"
 <Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Principals><Principal><UserId>$($Principal.UserId)</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals><Actions><Exec><Command>$command</Command><Arguments>$arguments</Arguments><WorkingDirectory>$working</WorkingDirectory></Exec></Actions><Triggers><TimeTrigger><Repetition><Interval>$interval</Interval></Repetition></TimeTrigger></Triggers><Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><ExecutionTimeLimit>PT10M</ExecutionTimeLimit><StartWhenAvailable>true</StartWhenAvailable></Settings></Task>
 "@
-    $m.Task=[PSCustomObject]@{State='Disabled'}
+    $m.Task=[PSCustomObject]@{State='Disabled';Principal=[PSCustomObject]@{RunLevel='Limited'}}
 }
 function global:Export-ScheduledTask { param($TaskName,$TaskPath) $global:ScheduleMock.Xml }
 function global:Enable-ScheduledTask { param($TaskName,$TaskPath) $global:ScheduleMock.Task.State='Ready' }
+function global:Disable-ScheduledTask { param($TaskName,$TaskPath) $global:ScheduleMock.Task.State='Disabled' }
 function global:Start-Sleep { param($Seconds) }
 function global:Start-ScheduledTask { param($TaskName,$TaskPath)
     $m=$global:ScheduleMock;$m.StartCalls++
@@ -90,6 +91,28 @@ try {
     Assert-Test ($m.Action.Argument.Contains('-WindowStyle Hidden') -and $m.Action.Argument.Contains('-Action Run') -and -not $m.Action.Argument.Contains('password')) 'Unsafe task arguments.'
     $scheduler=Join-Path $p '.secrets/backups/mysql84/pc2/scheduler'
     Assert-Test ($m.Action.Argument.Contains($scheduler) -and -not $m.Action.Argument.Contains($tool)) 'Task depends on temporary/source location.'
+    # Serialize a real Windows task definition in memory; never register a task on the test host.
+    $service=New-Object -ComObject 'Schedule.Service'
+    $service.Connect()
+    $definition=$service.NewTask(0)
+    $definition.Principal.UserId=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $definition.Principal.LogonType=3
+    $definition.Principal.RunLevel=0
+    $definition.Settings.MultipleInstances=2
+    $definition.Settings.ExecutionTimeLimit='PT10M'
+    $definition.Settings.StartWhenAvailable=$true
+    $timeTrigger=$definition.Triggers.Create(1)
+    $timeTrigger.StartBoundary=(Get-Date).AddHours(1).ToString('s')
+    $timeTrigger.Repetition.Interval='PT1H'
+    $execAction=$definition.Actions.Create(0)
+    $execAction.Path=$m.Action.Execute
+    $execAction.Arguments=$m.Action.Argument
+    $execAction.WorkingDirectory=$m.Action.WorkingDirectory
+    $fixtureXml=$m.Xml
+    $m.Xml=$definition.XmlText
+    Run-Step $p Status
+    $m.Xml=$fixtureXml
+    Write-Host 'PASS: actual Windows COM task XML serialization accepted without registering a task'
     Run-Step $p Test
     Assert-Test ($m.LastResult -eq 0 -and (Read-Record $p).Status -eq 'success' -and (Read-Record $p 'last-success.json').BackupDirectory -ne '') 'Real worker command line did not create a new backup.'
     $configBefore=[IO.File]::ReadAllText((Join-Path $scheduler 'config.json'))
@@ -125,6 +148,40 @@ try {
     Expect-Failure $p Test 'tool hash changed'
     Write-Host 'PASS: account/logon/privilege/interval/duration/action tampering, tool changes and overlapping workers rejected'
 
+    $p=New-Case 'omitted-defaults';Run-Step $p Install
+    $m=$global:ScheduleMock
+    $m.Xml=$m.Xml.Replace('<RunLevel>LeastPrivilege</RunLevel>','').Replace('<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>','')
+    $scheduler=Join-Path $p '.secrets/backups/mysql84/pc2/scheduler'
+    $worker=Join-Path $scheduler 'mysql84-backup-schedule.ps1'
+    $configuration=Join-Path $scheduler 'config.json'
+    [IO.File]::AppendAllText($worker,"`n# previous installed worker fixture")
+    $config=Get-Content -LiteralPath $configuration -Raw | ConvertFrom-Json
+    $config.WorkerSha256=(Get-FileHash -LiteralPath $worker).Hash
+    [IO.File]::WriteAllText($configuration,($config|ConvertTo-Json),$utf8)
+    $backupHash=(Get-FileHash -LiteralPath (Join-Path $scheduler 'mysql84-backup.ps1')).Hash
+    $latest=Join-Path $p '.secrets/backups/mysql84/pc2/latest.json'
+    $latestBefore=[IO.File]::ReadAllText($latest)
+    $credential=Join-Path $p '.secrets/backups/mysql84/pc2/credentials/loop_backup.clixml'
+    $credentialHash=(Get-FileHash -LiteralPath $credential).Hash
+    $m.Task.State='Running'
+    Expect-Failure $p Repair 'Task is running'
+    Assert-Test ((Get-FileHash -LiteralPath $worker).Hash -eq $config.WorkerSha256) 'Running task worker changed.'
+    $m.Task.State='Disabled'
+    Run-Step $p Repair
+    $repaired=Get-Content -LiteralPath $configuration -Raw | ConvertFrom-Json
+    Assert-Test ($repaired.WorkerSha256 -eq (Get-FileHash -LiteralPath $tool).Hash -and (Get-FileHash -LiteralPath $worker).Hash -eq $repaired.WorkerSha256) 'Installed worker/hash not repaired.'
+    Assert-Test ($m.RegisterCalls -eq 1 -and $m.Task.State -eq 'Ready') 'Repair recreated the task or failed to enable it.'
+    Assert-Test ($repaired.BackupSha256 -eq $backupHash -and (Get-FileHash -LiteralPath $credential).Hash -eq $credentialHash -and [IO.File]::ReadAllText($latest) -ceq $latestBefore) 'Repair changed backup, credential or latest backup state.'
+    & $worker -RepositoryPath $p -Action Status
+    Run-Step $p Test
+    $m.Task.Principal.RunLevel='Highest'
+    Expect-Failure $p Test 'Registered task differs'
+    Expect-Failure $p Repair 'Registered task differs'
+    $m.Task.Principal.RunLevel='Limited'
+    $m.Xml=$m.Xml.Replace('</Settings>','<MultipleInstancesPolicy>Parallel</MultipleInstancesPolicy></Settings>')
+    Expect-Failure $p Test 'Registered task differs'
+    Write-Host 'PASS: omitted XML defaults, effective CIM privilege checks and in-place worker repair without task/data/credential replacement'
+
     $p=New-Case 'not-verified';$root=Join-Path $p '.secrets/backups/mysql84/pc2'
     [IO.File]::WriteAllText((Join-Path $root 'latest.json'),(@{Stage='backup-ready';Directory='fixture'}|ConvertTo-Json))
     Expect-Failure $p Install 'isolated restore test'
@@ -139,7 +196,7 @@ try {
     Write-Host 'All schedule tests passed. Task Scheduler registration and Docker/MySQL simulated; worker PS5 command line executed for real.'
 }
 finally {
-    foreach ($name in @('Get-Command','Get-ScheduledTask','Get-ScheduledTaskInfo','New-ScheduledTaskAction','New-ScheduledTaskTrigger','New-ScheduledTaskPrincipal','New-ScheduledTaskSettingsSet','Register-ScheduledTask','Export-ScheduledTask','Enable-ScheduledTask','Start-Sleep','Start-ScheduledTask')) { Remove-Item ('Function:\'+$name) -ErrorAction SilentlyContinue }
+    foreach ($name in @('Get-Command','Get-ScheduledTask','Get-ScheduledTaskInfo','New-ScheduledTaskAction','New-ScheduledTaskTrigger','New-ScheduledTaskPrincipal','New-ScheduledTaskSettingsSet','Register-ScheduledTask','Export-ScheduledTask','Enable-ScheduledTask','Disable-ScheduledTask','Start-Sleep','Start-ScheduledTask')) { Remove-Item ('Function:\'+$name) -ErrorAction SilentlyContinue }
     Remove-Variable ScheduleMock -Scope Global -ErrorAction SilentlyContinue
     $resolved=[IO.Path]::GetFullPath($testRoot)
     $temp=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\','/')+[IO.Path]::DirectorySeparatorChar
