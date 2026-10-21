@@ -57,6 +57,33 @@ function Assert-ReplicaWriters([string]$Volume, [string]$ExpectedId = '') {
     elseif ($ids.Count -ne 1 -or $ids[0] -ne $ExpectedId) { throw 'Unexpected shared use of the replica volume.' }
 }
 
+function Get-ReplicaPassword {
+    $seed = [IO.File]::ReadAllText((Join-Path $incoming 'replication-password')).Trim()
+    if ($seed -notmatch '^(Lp9![a-f0-9]{28}|(Lp9!)?[a-f0-9]{64})$') { throw 'Unexpected replication credential format.' }
+    # Legacy bundles keep their original hashes; PC1 FixReplicationPassword applies the same prefix.
+    $seed.Substring(0, 32)
+}
+
+function Set-ReplicaClient([string]$Id) {
+    $credential = Get-ReplicaPassword
+    $client = @"
+[client]
+user=loop_repl
+password=$credential
+host=192.168.3.18
+port=3306
+protocol=TCP
+ssl-mode=VERIFY_IDENTITY
+ssl-ca=$($state.TlsDirectory)/ca.pem
+ssl-cert=$($state.TlsDirectory)/client-cert.pem
+ssl-key=$($state.TlsDirectory)/client-key.pem
+"@
+    $clientFile = Join-Path $private 'primary-client.cnf'
+    Write-ReplicaText $clientFile $client
+    $null = Invoke-ReplicaDocker -Arguments @('cp', $clientFile, ($Id + ':' + $state.TlsDirectory + '/client.cnf'))
+    $null = Invoke-ReplicaDocker -Arguments @('exec', $Id, 'chmod', '600', ($state.TlsDirectory + '/client.cnf'))
+}
+
 function Read-ReplicaBundle([string]$TrustedHash) {
     if ($TrustedHash -notmatch '^[a-fA-F0-9]{64}$') { throw 'A 64-character SHA256 copied from PC1 is required.' }
     $manifestPath = Join-Path $incoming 'manifest.json'
@@ -72,8 +99,7 @@ function Read-ReplicaBundle([string]$TrustedHash) {
         $item = Get-Item -LiteralPath $path
         if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $item.Length -eq 0 -or $item.Length -ne $entries[0].Length -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $entries[0].Sha256) { throw ('Transfer file integrity check failed: ' + $name) }
     }
-    $credential = [IO.File]::ReadAllText((Join-Path $incoming 'replication-password')).Trim()
-    if ($credential -notmatch '^(Lp9!)?[a-f0-9]{64}$') { throw 'Unexpected replication credential format.' }
+    $null = Get-ReplicaPassword
     $bundle
 }
 
@@ -202,23 +228,7 @@ if ($Action -eq 'Restore') {
         $null = Invoke-ReplicaDocker -Arguments @('exec', $state.CandidateId, 'chmod', '600', ($state.TlsDirectory + '/' + $file))
     }
     $null = Invoke-ReplicaDocker -Arguments @('exec', $state.CandidateId, 'chown', 'mysql:mysql', $state.TlsDirectory)
-    $credential = [IO.File]::ReadAllText((Join-Path $incoming 'replication-password')).Trim()
-    $client = @"
-[client]
-user=loop_repl
-password=$credential
-host=192.168.3.18
-port=3306
-protocol=TCP
-ssl-mode=VERIFY_IDENTITY
-ssl-ca=$($state.TlsDirectory)/ca.pem
-ssl-cert=$($state.TlsDirectory)/client-cert.pem
-ssl-key=$($state.TlsDirectory)/client-key.pem
-"@
-    $clientFile = Join-Path $private 'primary-client.cnf'
-    Write-ReplicaText $clientFile $client
-    $null = Invoke-ReplicaDocker -Arguments @('cp', $clientFile, ($state.CandidateId + ':' + $state.TlsDirectory + '/client.cnf'))
-    $null = Invoke-ReplicaDocker -Arguments @('exec', $state.CandidateId, 'chmod', '600', ($state.TlsDirectory + '/client.cnf'))
+    Set-ReplicaClient $state.CandidateId
     $restoreFile = Join-Path $private 'restore.sql'
     $writer = [IO.StreamWriter]::new($restoreFile, $false, $utf8)
     try {
@@ -273,6 +283,7 @@ Assert-ReplicaMount $production $state.CloneVolume
 if ($candidate.State.Running -or -not $production.State.Running -or $production.Image -ne $state.ImageId -or $production.Name -ne '/mysql-lab' -or $production.HostConfig.NetworkMode -ne 'bridge' -or (@($production.Config.Cmd) -join "`n") -cne ($serverArguments -join "`n")) { throw 'Activated replica runtime identity changed.' }
 Assert-ReplicaWriters $state.CloneVolume $state.ProductionId
 # The client config was copied only to the new data volume; it contains no root credential.
+Set-ReplicaClient $state.ProductionId
 $remote = @(Invoke-ReplicaDocker -Arguments @('exec', $state.ProductionId, 'mysql', ('--defaults-extra-file=' + $state.TlsDirectory + '/client.cnf'), '--batch', '--skip-column-names', "--execute=SELECT CONCAT('loop_uuid=',@@GLOBAL.server_uuid); SELECT CONCAT('loop_gtid_hex=',HEX(@@GLOBAL.gtid_executed));"))
 $uuidRows = @($remote | Where-Object { $_ -ceq ('loop_uuid=' + $state.PrimaryUuid) })
 $gtidRows = @($remote | Where-Object { $_ -cmatch '^loop_gtid_hex=[0-9A-F]*$' })
@@ -285,7 +296,7 @@ EXECUTE loop_protection_statement;
 DEALLOCATE PREPARE loop_protection_statement;
 '@
 if ($Action -eq 'Start') {
-    $credential = [IO.File]::ReadAllText((Join-Path $incoming 'replication-password')).Trim()
+    $credential = Get-ReplicaPassword
     $channelSql = @"
 SET @loop_channel_sql = IF(
     (SELECT COUNT(1) FROM performance_schema.replication_connection_configuration) = 0,

@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$RepositoryPath,
-    [ValidateSet('Prepare', 'ResumePrimary', 'Status')][string]$Action = 'Status'
+    [ValidateSet('Prepare', 'ResumePrimary', 'FixReplicationPassword', 'Status')][string]$Action = 'Status'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -107,6 +107,55 @@ if ($Action -eq 'ResumePrimary') {
     exit 0
 }
 
+if ($Action -eq 'FixReplicationPassword') {
+    $state = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
+    if ($state.Stage -ne 'export-ready' -or -not $state.PrimaryResumed -or $state.SourceId -ne $source.Id -or $state.SourceVolume -ne $upgrade.CloneVolume) { throw 'Only the completed, resumed PC1 export can repair its replication password.' }
+    $manifestFile = Join-Path $state.TransferDirectory 'manifest.json'
+    $manifest = Get-Content -LiteralPath $manifestFile -Raw | ConvertFrom-Json
+    if ($manifest.Format -ne 'loop-mysql84-seed-v1' -or $manifest.PrimaryServerId -ne 1 -or $manifest.PrimaryUuid -notmatch '^[a-f0-9-]{36}$' -or $manifest.PrimaryUuid -eq 'f1868a2a-a5a5-11f1-8815-9693e922f083') { throw 'Unexpected completed primary bundle.' }
+    $names = @('snapshot.sql', 'ca.pem', 'client-cert.pem', 'client-key.pem', 'replication-password')
+    if (@($manifest.Files).Count -ne 5) { throw 'Unexpected manifest file count.' }
+    foreach ($name in $names) {
+        $entries = @($manifest.Files | Where-Object Path -ceq $name)
+        $path = Join-Path $state.TransferDirectory $name
+        if ($entries.Count -ne 1 -or (Get-Item -LiteralPath $path).Length -ne $entries[0].Length -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ine $entries[0].Sha256) { throw 'Existing bundle integrity check failed. No account change allowed.' }
+    }
+    $seed = [IO.File]::ReadAllText((Join-Path $state.TransferDirectory 'replication-password')).Trim()
+    if ($seed -notmatch '^(Lp9![a-f0-9]{28}|(Lp9!)?[a-f0-9]{64})$') { throw 'Unexpected replication credential format.' }
+    # Reuse the first 32 ASCII characters on both PCs; keep the already trusted bundle unchanged.
+    $password = $seed.Substring(0, 32)
+    $clientFile = Join-Path $private 'replica-client-fixed.cnf'
+    $client = [IO.File]::ReadAllText((Join-Path $private 'replica-client.cnf'))
+    if (@([regex]::Matches($client, '(?m)^password=.*$')).Count -ne 1) { throw 'Unexpected primary TLS client config.' }
+    Write-ExportText $clientFile ($client -replace '(?m)^password=.*$', ('password=' + $password))
+    $null = Invoke-ExportDocker -Arguments @('exec', $source.Id, 'mkdir', '-p', '-m', '700', $state.TempDirectory)
+    $runner = Join-Path $private 'root-file.sh'
+    Write-ExportText $runner "#!/bin/sh`nset -eu`nmysql --user=root --password < `"`$1`"`n"
+    $null = Invoke-ExportDocker -Arguments @('cp', $runner, ($source.Id + ':' + $state.TempDirectory + '/root-file.sh'))
+    $repair = @"
+SET @loop_account_guard = IF(@@GLOBAL.server_uuid = '$($manifest.PrimaryUuid)'
+    AND @@GLOBAL.read_only = 0 AND @@GLOBAL.super_read_only = 0
+    AND (SELECT COUNT(1) FROM mysql.user WHERE User='loop_repl') = 1
+    AND (SELECT COUNT(1) FROM mysql.user WHERE User='loop_repl' AND Host='%'
+         AND plugin='caching_sha2_password' AND ssl_type='SPECIFIED'
+         AND x509_subject='/CN=loop-pc2-replica') = 1,
+    'SELECT 1', 'SELECT REPLICATION_ACCOUNT_IDENTITY_CHANGED');
+PREPARE loop_account_statement FROM @loop_account_guard;
+EXECUTE loop_account_statement;
+DEALLOCATE PREPARE loop_account_statement;
+SET SESSION sql_log_bin = 0;
+ALTER USER 'loop_repl'@'%' IDENTIFIED WITH caching_sha2_password BY '$password'
+    REQUIRE SUBJECT '/CN=loop-pc2-replica';
+"@
+    Invoke-ExportSql 'fix-replication-password' ($baseGuard + "`n" + $repair)
+    $null = Invoke-ExportDocker -Arguments @('cp', $clientFile, ($source.Id + ':' + $state.TlsDirectory + '/client.cnf'))
+    $null = Invoke-ExportDocker -Arguments @('exec', $source.Id, 'chmod', '600', ($state.TlsDirectory + '/client.cnf'))
+    $rows = @(Invoke-ExportDocker -Arguments @('exec', $source.Id, 'mysql', ('--defaults-extra-file=' + $state.TlsDirectory + '/client.cnf'), '--batch', '--skip-column-names', '--execute=SELECT VERSION(),@@GLOBAL.server_id,@@GLOBAL.server_uuid;'))
+    if (@($rows | Where-Object { $_ -ceq ("8.4.11`t1`t" + $manifest.PrimaryUuid) }).Count -ne 1) { throw 'Password updated, but verified TLS login failed. FixReplicationPassword can be retried; do not repeat Prepare.' }
+    Write-Host 'PASS: PC1 replication password is 32 characters and verified by TLS login. Bundle, snapshot, manifest hash and app accounts are unchanged. Run updated PC2 Start, then Verify.'
+    exit 0
+}
+
 if (Test-Path -LiteralPath $private) { throw 'Primary export files already exist. Do not repeat Prepare; run Status.' }
 $tlsScript = Join-Path $PSScriptRoot 'mysql84-primary-tls.sh'
 if (-not (Test-Path -LiteralPath $tlsScript)) { throw 'Place mysql84-primary-tls.sh beside this PowerShell tool.' }
@@ -152,7 +201,8 @@ foreach ($file in @('original-server-cert.pem', 'original-server-key.pem')) {
 $null = Invoke-ExportDocker -Arguments @('exec', $source.Id, 'sh', $containerTlsScript, 'install', '/var/lib/mysql', $state.TlsDirectory)
 Save-ExportStage 'tls-installed'
 
-$random = New-Object byte[] 32
+# SOURCE_PASSWORD accepts at most 32 characters: 4 prefix + 28 random hex characters.
+$random = New-Object byte[] 14
 $generator = [Security.Cryptography.RandomNumberGenerator]::Create()
 try { $generator.GetBytes($random) } finally { $generator.Dispose() }
 $password = 'Lp9!' + [BitConverter]::ToString($random).Replace('-', '').ToLowerInvariant()
