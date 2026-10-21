@@ -63,6 +63,8 @@ function global:docker {
                 $id = $c[2]
                 $sql = $m.Files[$id + ':' + $c[-1]]
                 $m.Sql.Add([PSCustomObject]@{Id=$id; Text=$sql; File=$c[-1]})
+                # Model MySQL error 3056, which the earlier orchestration mock missed.
+                if ($sql -match "SOURCE_PASSWORD=''([^']*)''" -and $Matches[1].Length -gt 32) { $global:LASTEXITCODE=1; return }
                 if ($m.RootFailure -and $c[-1].EndsWith('/' + $m.RootFailure + '.sql')) { $global:LASTEXITCODE=1 }
             }
             elseif ($c -contains 'mysql') {
@@ -153,6 +155,20 @@ try {
     Run-Step $p Start
     $start=@($global:ReplicaMock.Sql | Where-Object File -like '*/start-replication.sql')[0].Text
     Assert-Test ($start.Contains('SOURCE_SSL_VERIFY_SERVER_CERT=1') -and $start.Contains('SOURCE_AUTO_POSITION=1') -and $start.Contains('SOURCE_SSL_CERT=')) 'Secure auto-position channel missing.'
+    Assert-Test ($start -match "SOURCE_PASSWORD=''([^']*)''") 'Channel password missing.'
+    $channelPassword = $Matches[1]
+    Assert-Test ($channelPassword -ceq ('Lp9!' + ('a'*28)) -and $channelPassword.Length -eq 32) 'Legacy bundle did not yield the repaired PC1 password.'
+    $clientFile = Join-Path $p '.secrets/mysql84-replication/pc2/primary-client.cnf'
+    Assert-Test ([IO.File]::ReadAllText($clientFile).Contains('password=' + $channelPassword + "`n")) 'TLS probe still uses old password.'
+    # Retry exactly from the failure stage reported on PC2, without restoring or activating again.
+    $stateFile = Join-Path $p '.secrets/mysql84-replication/pc2/state.json'
+    $retryState = Get-Content $stateFile -Raw | ConvertFrom-Json
+    $retryState.Stage = 'replication-starting'
+    [IO.File]::WriteAllText($stateFile, ($retryState | ConvertTo-Json -Depth 8), $utf8)
+    $before = $global:ReplicaMock.Calls.Count
+    Run-Step $p Start
+    $newCalls = @($global:ReplicaMock.Calls | Select-Object -Skip $before)
+    Assert-Test (@($newCalls | Where-Object { $_[0] -in @('run','create','rename','stop') }).Count -eq 0) 'Start retry repeated restore/activation operations.'
     $global:ReplicaMock.RootFailure='verify-replication'
     Expect-Failure $p Verify 'Docker exec failed'
     Assert-Test ($global:ReplicaMock.Containers.production.HostConfig.RestartPolicy.Name -eq 'no') 'Failed verify enabled automatic restart.'
@@ -175,6 +191,22 @@ try {
     Expect-Failure $p Restore 'Unexpected data mount'
     Assert-Test ($before -eq $global:ReplicaMock.Sql.Count) 'Unsafe candidate reached destructive SQL.'
     Write-Host 'PASS: candidate on original volume cannot restore'
+
+    $p=New-Case 'new-32-character-bundle'
+    $bundle=Join-Path $p '.secrets/mysql84-replication/incoming/pc2-transfer'
+    $credentialFile=Join-Path $bundle 'replication-password'
+    [IO.File]::WriteAllText($credentialFile, ('Lp9!' + ('b'*28)), $utf8)
+    $manifestFile=Join-Path $bundle 'manifest.json'
+    $manifest=Get-Content $manifestFile -Raw | ConvertFrom-Json
+    $entry=@($manifest.Files | Where-Object Path -eq 'replication-password')[0]
+    $entry.Length=(Get-Item $credentialFile).Length
+    $entry.Sha256=(Get-FileHash $credentialFile).Hash
+    [IO.File]::WriteAllText($manifestFile, ($manifest | ConvertTo-Json -Depth 6), $utf8)
+    $global:ReplicaMock.Hash=(Get-FileHash $manifestFile).Hash
+    Run-Step $p Stage
+    Run-Step $p Restore
+    Assert-Test ([IO.File]::ReadAllText((Join-Path $p '.secrets/mysql84-replication/pc2/primary-client.cnf')).Contains('password=Lp9!' + ('b'*28) + "`n")) 'New 32-character credential changed.'
+    Write-Host 'PASS: 32-character SOURCE_PASSWORD boundary, legacy Start retry and new bundle compatibility'
     Write-Host 'All replica orchestration tests passed (Docker/MySQL simulated; real PC2 validation still required).'
 }
 finally {

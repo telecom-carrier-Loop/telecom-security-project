@@ -147,6 +147,7 @@ try {
         Assert-ExportTest ($file.Path -notin @('ca-key.pem', 'server-key.pem', 'original-server-key.pem')) 'Primary private identity included in transfer.'
     }
     $password = [IO.File]::ReadAllText((Join-Path $state.TransferDirectory 'replication-password'))
+    Assert-ExportTest ($password.Length -eq 32 -and $password -cmatch '^Lp9![a-f0-9]{28}$') 'Generated password exceeds SOURCE_PASSWORD limit or loses complexity.'
     foreach ($command in $global:ExportMock.Calls) { Assert-ExportTest (-not (($command -join ' ').Contains($password))) 'Replication password exposed in CLI arguments.' }
     $runner = [IO.File]::ReadAllText((Join-Path $private 'root-file.sh'))
     Assert-ExportTest ($runner.Contains('mysql --user=root --password < "$1"') -and -not $runner.Contains("`r")) 'Root file runner or LF handling incorrect.'
@@ -159,7 +160,38 @@ try {
     & $tool -RepositoryPath $casePath -Action Status
     Assert-ExportTest ([IO.File]::ReadAllText((Join-Path $private 'state.json')) -ceq $beforeState) 'Status changed export state.'
     Write-Host 'PASS: successful verified export, manifest hashes, limited transfer, CLI secret handling, resume, rerun refusal and read-only status'
-    Write-Host 'PASS: 9 mock scenarios; no real Docker, MySQL or network calls'
+
+    # Simulate the already-transferred 68-character legacy bundle from the reported failure.
+    $legacy = 'Lp9!' + ('a' * 64)
+    $credentialFile = Join-Path $state.TransferDirectory 'replication-password'
+    [IO.File]::WriteAllText($credentialFile, $legacy, $utf8)
+    $entry = @($manifest.Files | Where-Object Path -eq 'replication-password')[0]
+    $entry.Length = (Get-Item $credentialFile).Length
+    $entry.Sha256 = (Get-FileHash $credentialFile).Hash
+    $manifestFile = Join-Path $state.TransferDirectory 'manifest.json'
+    [IO.File]::WriteAllText($manifestFile, ($manifest | ConvertTo-Json -Depth 6), $utf8)
+    $beforeHash = (Get-FileHash $manifestFile).Hash
+    $beforeSql = $global:ExportMock.Sql.Count
+    & $tool -RepositoryPath $casePath -Action FixReplicationPassword
+    $repair = $global:ExportMock.Sql[$beforeSql]
+    Assert-ExportTest ($repair.Contains("BY '" + $legacy.Substring(0,32) + "'") -and -not $repair.Contains($legacy)) 'Repair did not use the same bounded password as PC2.'
+    Assert-ExportTest ($repair.Contains('SET SESSION sql_log_bin = 0;') -and $repair.Contains("REQUIRE SUBJECT '/CN=loop-pc2-replica'")) 'Repair lost local-only account/certificate protection.'
+    Assert-ExportTest (-not $repair.Contains('DROP DATABASE') -and -not $repair.Contains('SET GLOBAL super_read_only')) 'Repair changed application data or global write state.'
+    Assert-ExportTest ((Get-FileHash $manifestFile).Hash -ceq $beforeHash -and [IO.File]::ReadAllText($credentialFile) -ceq $legacy) 'Repair modified the trusted transfer bundle.'
+    & $tool -RepositoryPath $casePath -Action FixReplicationPassword
+    Assert-ExportTest ((Get-FileHash $manifestFile).Hash -ceq $beforeHash) 'Repair retry modified bundle.'
+    $global:ExportMock.GuardFailure = $true
+    $caught = ''
+    try { & $tool -RepositoryPath $casePath -Action FixReplicationPassword } catch { $caught = $_.Exception.Message }
+    Assert-ExportTest ($caught -like '*Docker exec failed*') 'Failed repair guard reported success.'
+    $global:ExportMock.GuardFailure = $false
+    [IO.File]::AppendAllText((Join-Path $state.TransferDirectory 'snapshot.sql'), 'tampered')
+    $beforeSql = $global:ExportMock.Sql.Count
+    $caught = ''
+    try { & $tool -RepositoryPath $casePath -Action FixReplicationPassword } catch { $caught = $_.Exception.Message }
+    Assert-ExportTest ($caught -like '*integrity check failed*' -and $global:ExportMock.Sql.Count -eq $beforeSql) 'Tampered bundle reached account repair SQL.'
+    Write-Host 'PASS: legacy password repair, repeat repair, account guard failure and bundle integrity; no DB restore or manifest changes'
+    Write-Host 'PASS: export and password-repair scenarios; no real Docker, MySQL or network calls'
 }
 finally {
     Remove-Item -LiteralPath Function:/docker -Force -ErrorAction SilentlyContinue
