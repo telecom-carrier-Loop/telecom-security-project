@@ -73,3 +73,58 @@ powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure
 Windows PowerShell 5.1에서 Docker 대역을 이용해 잘못된 볼륨, 공유 볼륨, SQL 실패, TLS 실패, 덤프 실패·누락, 재실행 차단, 해시와 비밀 전달 범위를 검사한다. 실제 OpenSSL로 CA·서버·클라이언트 인증서를 생성하여 IP·용도 검사와 잘못된 IP 거부도 확인한다. 실제 DB 연결과 백업은 공용 PC에서 실행 결과를 확인한다.
 
 참고: [MySQL GTID 초기 구성](https://dev.mysql.com/doc/refman/8.4/en/replication-gtids-howto.html), [암호화 복제 연결](https://dev.mysql.com/doc/refman/8.4/en/replication-encrypted-connections.html).
+
+## PC2 초기 복원과 복제 연결
+
+현재 PC2는 `mysql-lab`, 실제 서버 버전 8.4.11, 기본 bridge, 3306 공개, 데이터 볼륨 하나인 구성이다. `mysql:8` 태그를 새로 받지 않고 컨테이너의 실제 이미지 ID를 재사용한다. PC2 Flask와 DB에 쓰는 자동화는 중지한다. PC1의 준비를 다시 실행하지 않는다.
+
+1. PC1의 **pc2-transfer 폴더만** 위의 PC2 incoming 경로로 복사한다. PC1 콘솔의 `MANIFEST_SHA256`을 별도로 준비한다. 부모 폴더와 CA·서버 개인 키를 복사하지 않는다. 부분 덤프의 전체 GTID 포함 경고는 예상된 것으로, PC2에서는 앱 DB만 복제하도록 필터를 영구 지정한다.
+2. PC2 PowerShell에서 아래 `Stage`를 실행한다. 해시를 붙여넣고 **현재 PC2 root 비밀번호**를 입력한다. 해시·파일 무결성·PC2 UUID·GTID·22개 InnoDB 테이블을 먼저 검사한다. 원본을 정상 종료하고 원본 볼륨을 읽기 전용으로 마운트해 별도 볼륨에 복사한다. 복사본은 네트워크와 포트를 차단한 상태로 시작한다.
+
+```powershell
+powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure/tools/mysql84-replica.ps1 -RepositoryPath C:/Users/user/telecom-security-project -Action Stage
+```
+
+3. 복사본 MySQL이 준비될 때까지 약 15초 후 `Restore`를 실행한다. 현재 PC2 root 비밀번호를 입력한다. **원본이 아닌 격리된 복사본에서만** 바이너리 로그·GTID를 초기화하고 `my_new_board_db`를 PC1 스냅샷으로 대체한다. PC2 계정과 root 비밀번호는 유지한다. 쓰기 잠금을 영구 저장한다.
+
+```powershell
+powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure/tools/mysql84-replica.ps1 -RepositoryPath C:/Users/user/telecom-security-project -Action Restore
+```
+
+4. PASS 이후 `Activate`를 실행한다. 원본 이름은 `mysql-lab-before-replication-...`로 보존하고 복원된 볼륨을 사용하는 새 `mysql-lab`을 3306으로 공개한다. 기존 원본과 격리 검증 컨테이너는 모두 중지 상태로 유지한다.
+
+```powershell
+powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure/tools/mysql84-replica.ps1 -RepositoryPath C:/Users/user/telecom-security-project -Action Activate
+```
+
+5. 약 15초 후 `Start`를 실행한다. 실제 PC1 UUID와 TLS 인증서를 확인한 후 GTID 자동 위치·서버 인증서 검증·PC2 클라이언트 인증을 사용하는 채널을 생성한다. 현재 PC2 root 비밀번호를 입력한다. 시작 요청 PASS는 복제 완료 판정이 아니다.
+
+```powershell
+powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure/tools/mysql84-replica.ps1 -RepositoryPath C:/Users/user/telecom-security-project -Action Start
+```
+
+6. 약 10초 후 `Verify`를 실행하고 현재 PC2 root 비밀번호를 입력한다. PC1에서 관측한 GTID까지 최대 30초 대기하고 수신·적용 스레드, worker/coordinator 오류, 읽기 전용 설정을 확인한다. 통과한 뒤에만 자동 재시작 정책을 저장한다.
+
+```powershell
+powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure/tools/mysql84-replica.ps1 -RepositoryPath C:/Users/user/telecom-security-project -Action Verify
+```
+
+성공 기준은 `Stage: replica-ready`, `Replica_IO_Running: Yes`, `Replica_SQL_Running: Yes`, 두 Last_*_Errno=0, `Auto_Position: 1`, `read_only=1`, `super_read_only=1`이다. 이후 PC1에서 작은 테스트 데이터를 변경하고 PC2에서 반영을 확인한다. PC2의 Flask 쓰기 연결도 PC1을 사용해야 하며 PC2 로컬 DB에는 직접 쓰지 않는다.
+
+### 오류 발생 시
+
+오류가 난 단계에서 중단하고 상태를 확인한다. `Stage`·`Activate`를 처음부터 반복하거나 원본 볼륨을 삭제하지 않는다. `Verify`에서 단순 지연이 난 경우 스레드 오류를 확인한 후 `Verify`만 재시도한다. 로그/SQL/상태 파일 전체에는 민감 정보가 포함될 수 있으므로 공개하지 않는다.
+
+```powershell
+powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File infrastructure/tools/mysql84-replica.ps1 -RepositoryPath C:/Users/user/telecom-security-project -Action Status
+```
+
+### 이후 테이블 변경과 백업
+
+복제 필터는 `--replicate-do-db=my_new_board_db`로 컨테이너에 영구 저장한다. DDL은 ROW 형식에서도 기본 DB를 기준으로 필터링되므로 **PC1에서 `USE my_new_board_db;`를 먼저 실행한 후** 테이블 생성·변경·삭제를 수행한다. 마이그레이션의 기본 DB도 동일하게 지정한다. 계정 관리는 `mysql`을 기본 DB로 사용하는 별도 관리 작업으로 진행한다.
+
+복제는 삭제·잘못된 수정도 전달하므로 정기 백업을 대체하지 않는다. 복제 반영 시험 다음에 별도 저장소로 정기 덤프, 보관 기간, 격리 복구 시험, 수동 장애 전환을 구성한다. 이 도구는 자동 승격·자동 원복을 수행하지 않는다.
+
+PC2 도구 검증은 Windows PowerShell 5.1의 Docker 대역으로 진행한다. 전달 파일 변조, 잘못된/공유 볼륨, SQL 실패, 비정상 종료, 포트 충돌, 잘못된 복원 대상, TLS 실패, 빈 GTID, 재실행 차단, 성공 전 재시작 정책 차단을 검사한다. 실제 공용 PC2에서의 SQL 실행·통신 검증은 현장 실행 결과로 확인해야 한다.
+
+참고: [DB 복제 필터의 DDL 규칙](https://dev.mysql.com/doc/refman/8.4/en/replication-options-replica.html#option_mysqld_replicate-do-db), [복제 연결 상태 컬럼](https://dev.mysql.com/doc/refman/8.4/en/performance-schema-replication-connection-configuration-table.html).
