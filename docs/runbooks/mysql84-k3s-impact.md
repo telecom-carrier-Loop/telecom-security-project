@@ -6,18 +6,26 @@
 
 웹 실행 위치가 Windows/Ubuntu의 개발 프로세스에서 Ubuntu k3s Pod로 바뀌었다. MySQL은 기존 Windows Docker에 남아 있다. **이유 없이 복제를 초기화하거나 DB 볼륨을 옮길 필요는 없다.** 기존 복제·격리 복구의 안전 장치는 유지한다.
 
-반면 DB 접속 설정의 반영 대상, 원격 앱 계정, 승격 후 백업 역할, Kubernetes 설정 복구 절차는 새 구조에 맞춰 보완해야 한다. 현재 확인된 것은 복제·백업·격리 복구의 과거 PASS와 오늘의 PC1 DB 연결이다. PC2 승격·앱 쓰기 대상 변경·원복의 통합 성공을 확인한 증거는 없다.
+반면 DB 접속 설정의 반영 대상, 원격 앱 계정, 승격 후 백업 역할, Kubernetes 설정 복구 절차는 새 구조에 맞춰 보완해야 한다. 현재 확인된 것은 복제·백업·격리 복구의 과거 PASS, 오늘의 PC1 DB 연결·쓰기 역할, 22:25 KST의 PC2 예약 백업 재검증이다. PC2 승격·앱 쓰기 대상 변경·원복의 통합 성공을 확인한 증거는 없다.
 
 ## 확인된 기준
 
 | 구분 | 현재/과거 확인값 | 오늘의 추가 확인 |
 |---|---|---|
 | Primary | PC1 Windows `192.168.3.18:3306`, `flask_mysql`, MySQL 8.4.11 | 두 노드의 Pod TCP, 두 Flask Pod Ready·업무 조회 |
-| Replica | PC2 Windows `192.168.3.19:3306`, `mysql-lab`, server_id 2, 읽기 전용 | 오늘 복제 지연·스레드 상태의 새 출력은 없음 |
+| Replica | PC2 Windows `192.168.3.19:3306`, `mysql-lab`, server_id 2, 읽기 전용 | 22:25 KST 백업 preflight의 Replica 조건 통과. 직접 복제 지연 수치 출력은 없음 |
 | 복제 | TLS·GTID, 앱 DB `my_new_board_db` 필터, 10-21 데이터·DDL 반영 PASS | 웹 배치 변경만으로 채널을 재생성하지 않음 |
-| 백업·복구 | PC2의 1시간 예약 실제 실행·22개 테이블 격리 RestoreTest PASS | 오늘 최신 예약 실행 여부는 별도 Status 확인 필요 |
+| 백업·복구 | PC2의 1시간 예약 실제 실행·22개 테이블 격리 RestoreTest PASS | 오늘 Status 22:14 성공·Test 22:25 새 백업 성공. 최신 덤프 RestoreTest는 별도 |
 | 앱 설정 | `telecom/telecom-runtime` + `telecom/telecom-api-secrets` → Flask 환경변수 | 기존 접속 계정 `root`, DB_HOST `192.168.3.18` |
 | 앱 복제본 | `telecom-api` 두 개, 공통 DB 접속 설정 | PC1·PC2 각각 Ready 확인 |
+
+## 22:25 KST 후속 현장 검증
+
+PC1 앱 연결에서 MySQL 8.4.11, server_id 1, `read_only=0`, `super_read_only=0`, 인증 계정 `root@%`를 확인했다. 컨테이너 내부의 `root@localhost` 조회는 PC1·PC2 모두 인증 오류 1045로 실행되지 않았고 비밀번호 변경은 하지 않았다. 앱 원격 계정과 컨테이너 로컬 계정의 인증을 구분한다.
+
+PC2 Status에서 최근 백업의 22:14:17~22:14:20 KST 성공(원문 13:14:17Z~13:14:20Z)을 확인했다. 이어 실제 작업 스케줄러 Test가 22:25:11~22:25:13 KST(13:25:11Z~13:25:13Z)에 새 백업을 만들고 PASS했다. 작업 상태 Ready, 결과 0, last-run/last-success success, 다음 예약 23:14:14 KST였다.
+
+이 성공은 저장된 `loop_backup` 인증, 기존 Replica 보호 검사, 실제 예약 실행 경로와 새 덤프 생성이 웹 이전 후에도 동작함을 확인한다. 직접 `SHOW REPLICA STATUS`의 전체 값이나 `Seconds_Behind_Source=0`, 최신 데이터 완전 일치, 이번 덤프의 격리 복원, DB 승격을 확인한 결과는 아니다. 웹 VM/k3s 이전만을 이유로 기존 복제·예약 백업 스크립트를 수정할 필요는 없다는 판단을 뒷받침한다.
 
 ## 수정 필요 여부
 
