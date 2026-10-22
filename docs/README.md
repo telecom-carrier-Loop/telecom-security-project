@@ -8,3 +8,8 @@
 - meeting-notes/: 날짜·담당·결정·Issue/PR 링크.
 
 [통합 개발 확정 기준](contracts/integration-baseline-v1.0.md)을 먼저 읽고, 변경한 계약과 설정·테스트를 함께 갱신합니다.
+
+## 최신 현장 기록
+
+- [2026-10-22 k3s 웹 배포·검증 결과와 pfSense 인계](operations/2026-10-22-k3s-web-handoff.md)
+- [MySQL 복제·백업·복구의 k3s 이전 영향 점검](runbooks/mysql84-k3s-impact.md)
