@@ -1,5 +1,7 @@
 # 인프라 담당과 A·C·D 연동 계약
 
+2026-10-22 실제 k3s 웹 배포 상태는 [날짜별 현장 인계](2026-10-22-k3s-web-handoff.md), MySQL 연동 변경은 [영향 점검](../runbooks/mysql84-k3s-impact.md)을 우선 확인합니다. 아래 VLAN/VIP·로컬 실행·최초 미구현 설명은 이전 설계/인계 기록이며 현재 적용 상태를 뜻하지 않습니다.
+
 현재 공용 PC 실행 환경과 주소는 [Windows Docker 두 PC 가이드](shared-pc-docker.md)를 우선 확인합니다. 최신 main에는 웹·API·Migration 초안이 추가되었습니다. 아래 최초 인계의 파일 미구현·장비 미확인 설명은 기반 작성 당시의 기록이며, 앱 DB의 검증 TLS 연결 설정과 실제 Docker 연동은 후속 확인 사항입니다.
 
 기준 문서: [통합 확정 기준](../contracts/integration-baseline-v1.0.md). 아래는 현재 구현과 연결할 작업입니다.
