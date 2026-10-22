@@ -1,0 +1,36 @@
+﻿# Windows PowerShell 5.1/7 실행용 · 안전한 모의 GELF UDP 테스트
+# Graylog 웹: http://localhost:9000  / GELF UDP: 127.0.0.1:12201
+# 실제 공격/변경 없이 Graylog 입력 → Event Definition → n8n → Discord 구간만 검사합니다.
+# Wazuh Manager 자체 규칙 발동 검증이 아닙니다.
+# 대상: ED-WZ-02 Wazuh Rule 100236 Flask k3s 설정 변경
+# Graylog Search: wazuh_rule_id:100236
+# ED-WZ-02는 현재 Content Pack에서 비활성화입니다. Graylog 수신 여부와 Event Definition 활성 상태 확인 필요.
+# 실제 Wazuh Manager가 이 Rule ID를 판단한 것이 아닙니다. 실제 탐지 확인은 Manager의 wazuh-logtest와 Agent 로그/FIM 이벤트로 별도 검사하세요.
+$GRAYLOG_HOST = '127.0.0.1'
+$GRAYLOG_PORT = 12201
+$udp = New-Object System.Net.Sockets.UdpClient
+try {
+    $log = @{
+        version = '1.1'
+        host = 'graylog-test-suite'
+        short_message = 'ED-WZ-02 Wazuh Rule 100236 Flask k3s 설정 변경 simulated validation #1'
+        level = 4
+        _test_source = 'GL-WZ-ADDITIONAL-20261022'
+        _simulation = $true
+        _wazuh_rule_id = '100236'
+        _wazuh_rule_level = 8
+        _wazuh_rule_description = 'Flask k3s 설정 변경'
+        _wazuh_agent_name = 'linux-k3s-test-agent'
+        _wazuh_data_srcip = ''
+        _wazuh_file = '/etc/rancher/k3s/config.yaml'
+        _wazuh_syscheck_event = 'modified'
+        _original_log = ''
+        _wazuh_event_source = 'simulated-gelf-not-manager'
+    } | ConvertTo-Json -Compress -Depth 8
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($log)
+    [void]$udp.Send($bytes, $bytes.Length, $GRAYLOG_HOST, $GRAYLOG_PORT)
+    Start-Sleep -Milliseconds 150
+} finally {
+    $udp.Close()
+}
+Write-Host '모의 GELF UDP 로그 전송 시도 완료. Graylog Search 및 Alerts에서 수신 확인 필요.' -ForegroundColor Green
