@@ -15,7 +15,9 @@
 
 정상 종료 후 다음 날 다시 켜는 것은 DB 장애 전환이 아니다. 매일 복제 초기화, Restore/Activate, DB 승격, 이미지 재반입이나 k3s 재설치를 하지 않는다. 수동 `docker stop` 뒤에는 `unless-stopped` 컨테이너가 Docker 재시작만으로 다시 켜지지 않을 수 있어 `docker start`를 명시적으로 사용한다.
 
-2026-10-22 사용자 확인상 MySQL `root@localhost` 오류 1045는 아직 미해결이다. 저장된 `loop_backup`으로 백업·복원에 성공한 것과 관리자 인증은 별개다. 일상 종료·시작에는 저장된 계정을 사용하지만 DB 승격 전에는 관리자 접속을 해결해야 한다.
+2026-10-22 후속 화면에서 PC1 앱의 `root@%` 접속, server_id 1, read_only=0, super_read_only=0을 확인했다. SHOW GRANTS에는 CREATE USER, SYSTEM_VARIABLES_ADMIN, REPLICATION_SLAVE_ADMIN 및 GRANT OPTION 등 관리자 권한이 있었다. 따라서 PC1에는 기존 앱 연결을 통한 관리자 접근 경로가 확인됐다. 다만 이는 앞서 오류 1045가 났던 로컬 `root@localhost` 로그인이나 PC2 관리자 인증의 성공을 뜻하지 않는다. 일상 종료·시작에는 저장된 `loop_backup` 계정을 사용하고, DB 승격 전에는 PC2의 관리자 접근과 양쪽 앱 계정·권한을 추가 확인한다. 비밀번호 초기화는 수행하지 않았다.
+
+명령 실행 순서는 종료할 때 **A1 → A2 → A3 → A4 → A5 → A6**, 다음 날 시작할 때 **B1 → B2 → B3 → B4 → B5 → B6 → B7**이다. PowerShell의 `& { ... }` 블록은 전체를 붙여 넣어야 중간 오류에서 나머지 단계도 중단된다. 각 블록의 PC 번호와 Windows/Ubuntu 구분을 확인하고 실행한다. 아래 예약 작업 명령은 기존 Discord 감시 등록이 완료된 상태를 기준으로 한다.
 
 ## A. 작업을 마칠 때
 
