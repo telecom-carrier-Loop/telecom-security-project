@@ -13,7 +13,9 @@ import json
 from datetime import date, timedelta
 
 from app.extensions import db
-from app.models import (Benefit, IncidentHistory, Invoice, IpBlock, IpWhitelist, MembershipAccount, MembershipTier,
+EARN_RATE_BP = {'BASIC': 50, 'SILVER': 100, 'GOLD': 200, 'VIP': 300}  # 등급별 납부 적립률 (100 = 1%)
+
+from app.models import (Notice, ShopItem, Benefit, IncidentHistory, Invoice, IpBlock, IpWhitelist, MembershipAccount, MembershipTier,
                         Payment, Plan, PointTransaction, SecurityAuditLog, SecurityIncident, Subscription,
                         SupportTicket, UsageRecord, User)
 from app.models.base import utcnow
@@ -41,6 +43,37 @@ TICKETS = [
 ]
 
 
+def _shop_and_notices(admin_id=None):
+    """포인트 상점 상품·공지사항 (가상)."""
+    if not ShopItem.query.first():
+        db.session.add_all([ShopItem(name=n, description=d, category=c, price_points=p, stock=s, min_tier_rank=r)
+                            for n, d, c, p, s, r in [
+            ("데이터 1GB 쿠폰", "이번 달 데이터 1GB 추가 (가상)", "DATA", 3000, None, 0),
+            ("편의점 3,000원 상품권", "가상편의점 모바일 상품권", "COUPON", 3000, 100, 0),
+            ("L∞P 텀블러", "L∞P 로고 텀블러 (가상 배송)", "GOODS", 8000, 20, 1),
+            ("데이터 5GB 쿠폰", "이번 달 데이터 5GB 추가 (가상)", "DATA", 12000, None, 2),
+            ("무선 이어폰", "VIP 전용 한정 상품 (가상)", "GOODS", 50000, 3, 3),
+            ("데이터 500MB 쿠폰", "이번 달 데이터 500MB 추가 (가상)", "DATA", 1500, None, 0),
+            ("음성통화 30분 추가", "이번 달 음성통화 30분 추가 (가상)", "DATA", 2000, None, 0),
+            ("카페 아메리카노 교환권", "가상카페 아메리카노 1잔 모바일 교환권", "COUPON", 4500, 200, 0),
+            ("영화 관람권 1매", "가상시네마 2D 일반 관람권", "COUPON", 9000, 50, 1),
+            ("L∞P 에코백", "L∞P 로고 캔버스 에코백 (가상 배송)", "GOODS", 6000, 30, 1),
+            ("보조배터리 10000mAh", "L∞P 로고 보조배터리 (가상 배송)", "GOODS", 25000, 10, 2),
+            ("데이터 무제한 1일 이용권", "24시간 데이터 무제한 (가상, VIP 전용)", "DATA", 20000, None, 3),
+        ]])
+    if not Notice.query.first():
+        now = utcnow()
+        db.session.add_all([Notice(category=c, title=t, content=b, is_pinned=p, is_published=True,
+                                   published_at=now, author_id=admin_id) for c, t, b, p in [
+            ("SECURITY", "[보안] L∞P를 사칭한 문자에 주의하세요",
+             "L∞P는 문자로 비밀번호나 카드 번호를 묻지 않습니다.\n의심 문자를 받으면 링크를 누르지 말고 1:1 문의로 알려 주세요.", True),
+            ("MAINTENANCE", "10월 정기 점검 안내 (새벽 2시~4시)",
+             "점검 시간 동안 요금 납부와 멤버십 기능을 잠시 사용할 수 없습니다.", False),
+            ("EVENT", "L∞P+ 포인트 상점 오픈",
+             "등급별로 다른 상품을 포인트로 교환할 수 있습니다. 요금 납부 적립률도 등급에 따라 달라집니다.", False),
+        ]])
+
+
 def _hash(obj) -> str:
     return hashlib.sha256(json.dumps(obj, sort_keys=True, default=str).encode()).hexdigest()
 
@@ -53,7 +86,7 @@ def _reference_data():
             ("5G_STANDARD", "5G Standard", 55000, 110 * 1024, "5G"),
             ("5G_PREMIUM", "5G Premium", 85000, -1, "5G")]])
     if not MembershipTier.query.first():
-        db.session.add_all([MembershipTier(code=c, name=n, min_monthly_fee=f, rank=r) for c, n, f, r in [
+        db.session.add_all([MembershipTier(code=c, name=n, min_monthly_fee=f, rank=r, earn_rate_bp=EARN_RATE_BP[c]) for c, n, f, r in [
             ("BASIC", "Basic", 0, 0), ("SILVER", "Silver", 35000, 1),
             ("GOLD", "Gold", 60000, 2), ("VIP", "VIP", 85000, 3)]])
     if not Benefit.query.first():
@@ -142,5 +175,6 @@ def seed_demo() -> bool:
         db.session.add(inc)
         db.session.flush()
         db.session.add(IncidentHistory(incident_id=inc.id, action="CREATED", note=f"{src} 이벤트로 생성 (가상)"))
+    _shop_and_notices(admin.id)
     db.session.commit()
     return True
