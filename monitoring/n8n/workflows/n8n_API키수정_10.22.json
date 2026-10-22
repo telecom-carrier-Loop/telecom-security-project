@@ -1,0 +1,1205 @@
+{
+  "name": "프로젝트용",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://discord.com/api/webhooks/1561946800892543006/PWZqnmCGrlltwCJa7VyytSMuE3Xwpd3lPgwve88KMVduHUIEQWgUH_W17oMZZG0FtRch",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        240,
+        320
+      ],
+      "id": "9e828c73-0b42-4c34-ac8a-d6d87509e85b",
+      "name": "디스코드"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Graylog 집계 이벤트(다수 실패가 같은 src_ip) → IP 실차단 payload\nconst out = [];\nfor (const item of $input.all()) {\n  const b = (item.json ?? {}).body ?? item.json ?? {};\n  const events = b.alerts ?? b.events ?? (b.src_ip ? [b] : []);\n  for (const e of events) {\n    const ip = e.src_ip ?? e.ip;\n    if (!ip || ip === '0.0.0.0') continue;         // 출발지 IP 없으면 차단 불가(스킵)\n    const cnt = e.count ?? e.fail_count ?? '?';\n    out.push({ json: {\n      ip: ip, src_ip: ip,\n      reason: `공격 출발지 자동 차단: ${cnt}회 로그인 실패(동일 IP)`,\n      fail_count: Number(e.count ?? e.fail_count ?? 0),\n      username: e.username ?? e.user ?? '', student: e.student ?? 'lsy',\n      severity: 'High', source: 'ip-guard',\n    }});\n  }\n}\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        208
+      ],
+      "id": "e95263e3-b57d-4dc6-b94e-081350fd65c7",
+      "name": "판정함수"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "=\n{{ (() => {\n  // 현재 처리 중인 아이템만 참조\n  const e = $input.item.json;\n\n  const text = (v, fallback = \"정보 없음\") =>\n    v === undefined || v === null || v === \"\"\n      ? fallback\n      : String(v);\n\n  const safe = (v, max = 1000) =>\n    text(v)\n      .replace(/@/g, \"@\\u200b\")\n      .slice(0, max);\n\n  const source = text(e.source ?? e.kind, \"\").toLowerCase();\n  const reason = text(\n    e.reason ?? e.description ?? e.text ?? e.title, \"\"\n  );\n  const action = text(\n    e.action ?? e.decision, \"\"\n  ).toLowerCase();\n\n  // 탐지 유형 자동 분류\n  let type = \"general\";\n\n  if (\n    source === \"privilege-guard\" ||\n    /과잉권한|권한 회수/.test(reason)\n  ) {\n    type = \"privilege\";\n  } else if (source === \"ip-guard\") {\n    type = \"ip\";\n  } else if (\n    source === \"login-guard\" ||\n    /계정 잠금/.test(reason)\n  ) {\n    type = \"login\";\n  } else if (\n    source === \"wazuh\" ||\n    e.rule_id !== undefined\n  ) {\n    type = \"wazuh\";\n  } else if (\n    source === \"correlation\" ||\n    [\"spray\", \"aggregation\"].includes(source) ||\n    [\"correlation\", \"spray\", \"aggregation\"].includes(e.kind)\n  ) {\n    type = \"correlation\";\n  } else if (\n    /인시던트|incident/i.test(\n      reason + \" \" + source + \" \" + text(e.title, \"\")\n    ) || e.hours !== undefined\n  ) {\n    type = \"incident\";\n  }\n\n  // 유형별 Discord 경보\n  const configs = {\n    privilege: {\n      title: \"🔐 과잉권한 탐지 및 회수 판정\",\n      color: 0xED4245,\n      description: \"비정상 권한 부여가 탐지되었습니다.\",\n      action: \"🔐 권한 회수 대상\"\n    },\n    ip: {\n      title: \"🚫 공격 출발지 IP 차단 판정\",\n      color: 0xED4245,\n      description: \"동일 출발지에서 비정상 접근이 감지되었습니다.\",\n      action: \"🚫 공격 출발지 차단 대상\"\n    },\n    login: {\n      title: \"🔒 브루트포스 계정 잠금 판정\",\n      color: 0xFEE75C,\n      description: \"반복적인 로그인 실패가 감지되었습니다.\",\n      action: \"🔒 계정 잠금 대상\"\n    },\n    wazuh: {\n      title: \"🛡️ Wazuh 호스트 보안 경보\",\n      color: 0x5865F2,\n      description: \"Wazuh 호스트 보안 이벤트가 발생했습니다.\",\n      action: \"🔎 호스트 이벤트 분석\"\n    },\n    correlation: {\n      title: \"🚨 복합 보안 위협 탐지\",\n      color: 0xED4245,\n      description: \"보안 이벤트 집계 또는 상관분석 경보가 발생했습니다.\",\n      action: \"🔎 복합공격 분석\"\n    },\n    incident: {\n      title: \"📋 보안 인시던트 리포트\",\n      color: 0xF47B20,\n      description: \"보안 사고 관련 인시던트가 생성되었습니다.\",\n      action: \"📋 인시던트 확인\"\n    },\n    general: {\n      title: \"⚠️ 보안 이벤트 탐지\",\n      color: 0x5865F2,\n      description: \"새로운 보안 이벤트가 발생했습니다.\",\n      action: \"🔎 추가 분석 필요\"\n    }\n  };\n\n  const c = configs[type];\n\n  const severity = text(\n    e.severity,\n    type === \"wazuh\" ? \"Rule 기반\" : \"미지정\"\n  );\n\n  const ip = text(e.src_ip ?? e.srcip ?? e.ip);\n  const user = text(e.username ?? e.user);\n  const rule = text(e.rule_id ?? e.rule ?? e.title);\n\n  const count = e.fail_count ?? e.count;\n\n  const actions = {\n    block: \"🚫 IP 차단 판정\",\n    lock: \"🔒 계정 잠금 판정\",\n    revoke: \"🔐 권한 회수 판정\",\n    deny: \"⛔ 접근 거부 판정\",\n    allow: \"✅ 접근 허용 판정\",\n    alert: \"⚠️ 경보 / 차단 보류\",\n    record: \"📝 이벤트 기록\",\n    review: \"🔎 추가 분석 필요\"\n  };\n\n  const finalAction = actions[action] ?? c.action;\n\n  // Discord Embed 필드\n  const fields = [\n    {\n      name: \"📡 탐지 시스템\",\n      value: safe(e.source ?? e.kind ?? type),\n      inline: true\n    },\n    {\n      name: \"🚨 심각도\",\n      value: safe(severity),\n      inline: true\n    },\n    {\n      name: \"⚙️ 대응 판정\",\n      value: safe(finalAction),\n      inline: false\n    },\n    {\n      name: \"🌐 출발지 IP\",\n      value: safe(ip),\n      inline: true\n    },\n    {\n      name: \"👤 대상 계정\",\n      value: safe(user),\n      inline: true\n    }\n  ];\n\n  // 로그인 실패 횟수\n  if (count !== undefined && count !== null) {\n    fields.push({\n      name: \"🔢 로그인 실패 횟수\",\n      value: `${safe(count)}회`,\n      inline: true\n    });\n  }\n\n  // 탐지 규칙\n  if (rule !== \"정보 없음\") {\n    fields.push({\n      name: \"📌 탐지 규칙\",\n      value: safe(rule),\n      inline: false\n    });\n  }\n\n  // 탐지 사유\n  fields.push({\n    name: \"📝 상세 탐지 사유\",\n    value: safe(reason || c.description),\n    inline: false\n  });\n\n  // 유형별 추가 정보\n  const extras = [\n    [\"🖥️ Wazuh Agent\", e.agent],\n    [\"📁 대상 파일\", e.file],\n    [\"🎯 MITRE ATT&CK\", e.attack],\n    [\"📈 Wazuh Rule Level\", e.rule_level],\n    [\"👥 권한 부여자\", e.granted_by],\n    [\"🏷️ 담당자\", e.student],\n    [\"🎫 인시던트 키\", e.key],\n    [\n      \"⏱️ 리포트 기간\",\n      e.hours != null ? `${e.hours}시간` : null\n    ]\n  ];\n\n  for (const [name, value] of extras) {\n    if (\n      value !== undefined &&\n      value !== null &&\n      value !== \"\"\n    ) {\n      fields.push({\n        name,\n        value: safe(value),\n        inline: true\n      });\n    }\n  }\n\n  const colorBySeverity = {\n    critical: 0x992D22,\n    high: 0xED4245,\n    medium: 0xFEE75C,\n    low: 0x57F287\n  };\n\n  const color =\n    colorBySeverity[severity.toLowerCase()] ??\n    c.color;\n\n  return {\n    username: \"Security Alert Bot\",\n    allowed_mentions: {\n      parse: []\n    },\n    embeds: [\n      {\n        title: `[${severity.toUpperCase()}] ${c.title}`,\n        description: c.description,\n        color,\n        fields: fields.slice(0, 25),\n        footer: {\n          text: \"Security Monitoring | n8n → Discord | 실제 대응 여부 별도 확인\"\n        },\n        timestamp: new Date().toISOString()\n      }\n    ]\n  };\n})() }}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        64,
+        320
+      ],
+      "id": "2a9dfec7-0533-485a-8ef8-e9758992bee2",
+      "name": "메시지"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/security/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "0d407335238b40cbe72c980e160d21ac60cf216a3cc73f9546e52d32f97f23f2"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"student\": \"{{ $json.student }}\",\n  \"src_ip\": \"{{ $json.src_ip }}\",\n  \"decision\": \"{{ $json.decision }}\",\n  \"severity\": \"{{ $json.severity }}\",\n  \"reason\": \"{{ $json.reason }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -544,
+        928
+      ],
+      "id": "753b53f0-7ae3-42ca-b314-deabdb81c58d",
+      "name": "대시보드 POST",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "=\n{{ (() => {\n  const e = $json;\n\n  const safe = (v) =>\n    String(v ?? \"정보 없음\")\n      .replace(/@/g, \"@\\u200b\");\n\n  return {\n    username: \"Security Alert Bot\",\n    allowed_mentions: { parse: [] },\n    embeds: [{\n      title: \"🚫 [HIGH] 보안 접근 거부 판정\",\n      description: \"높은 위험도의 보안 이벤트가 탐지되어 접근 거부 대상으로 판정되었습니다.\",\n      color: 15548997,\n      fields: [\n        {\n          name: \"🌐 출발지 IP\",\n          value: safe(e.src_ip),\n          inline: true\n        },\n        {\n          name: \"🚨 위험 레벨\",\n          value: safe(e.level),\n          inline: true\n        },\n        {\n          name: \"📌 탐지 규칙\",\n          value: safe(e.rule),\n          inline: false\n        },\n        {\n          name: \"⚙️ 판정 결과\",\n          value: \"⛔ DENY\",\n          inline: true\n        },\n        {\n          name: \"👤 담당자\",\n          value: safe(e.student),\n          inline: true\n        },\n        {\n          name: \"📝 판정 근거\",\n          value: safe(e.reason),\n          inline: false\n        }\n      ],\n      footer: {\n        text: \"Security Monitoring | n8n → Discord | 접근 거부 판정\"\n      },\n      timestamp: new Date().toISOString()\n    }]\n  };\n})() }}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        0,
+        0
+      ],
+      "id": "002d7f34-c5a9-4299-9fdb-0de68de7dc5a",
+      "name": "메시지 거부"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "=\n{{ (() => {\n  const e = $json;\n\n  const safe = (v) =>\n    String(v ?? \"정보 없음\")\n      .replace(/@/g, \"@\\u200b\");\n\n  const severity = String(e.severity ?? \"Low\");\n  const isMedium = severity.toLowerCase() === \"medium\";\n\n  return {\n    username: \"Security Alert Bot\",\n    allowed_mentions: { parse: [] },\n    embeds: [{\n      title: isMedium\n        ? \"⚠️ [MEDIUM] 보안 접근 허용 판정\"\n        : \"✅ [LOW] 정상 접근 허용 판정\",\n      description: isMedium\n        ? \"중간 위험도의 이벤트가 감지되었으나 설정된 기준에 따라 접근 허용으로 판정되었습니다. 추가 검토가 필요할 수 있습니다.\"\n        : \"보안 판정 기준에 따라 접근 허용 대상으로 분류되었습니다.\",\n      color: isMedium ? 16705372 : 5763719,\n      fields: [\n        {\n          name: \"🌐 출발지 IP\",\n          value: safe(e.src_ip),\n          inline: true\n        },\n        {\n          name: \"🚨 위험 레벨\",\n          value: safe(e.level),\n          inline: true\n        },\n        {\n          name: \"📌 탐지 규칙\",\n          value: safe(e.rule),\n          inline: false\n        },\n        {\n          name: \"⚙️ 판정 결과\",\n          value: \"✅ ALLOW\",\n          inline: true\n        },\n        {\n          name: \"👤 담당자\",\n          value: safe(e.student),\n          inline: true\n        },\n        {\n          name: \"📝 판정 근거\",\n          value: safe(e.reason),\n          inline: false\n        }\n      ],\n      footer: {\n        text: \"Security Monitoring | n8n → Discord | 접근 허용 판정\"\n      },\n      timestamp: new Date().toISOString()\n    }]\n  };\n})() }}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        0,
+        128
+      ],
+      "id": "869ca60e-ecb1-474e-b917-3ba4b8e34994",
+      "name": "메시지 허용"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d3d224a8-de82-4257-b716-40b7aff381cf",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "deny",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -416,
+        64
+      ],
+      "id": "6e2a47c3-2aed-4c59-a9df-f88ec2783878",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 거부 기준 숫자를 상수로 설정 (나중에 이 숫자만 바꾸면 기준이 변합니다)\nconst DENY_THRESHOLD = 10;\nconst MEDIUM_THRESHOLD = 7;\n\nconst results = [];\n\n// Webhook으로 들어온 데이터를 하나씩 가져옵니다.\nfor (const item of $input.all()) {\n  const student = item.json.body.student;\n  const alerts = item.json.body.alerts || [];\n\n  // 경보 목록을 한 건씩 펼쳐서 검사합니다.\n  for (const alert of alerts) {\n    const level = alert.level;\n    const ip = alert.ip;\n    const rule = alert.rule;\n    \n    let severity = \"Low\";\n    let decision = \"allow\";\n\n    // 레벨에 따른 판정 로직\n    if (level >= DENY_THRESHOLD) {\n      severity = \"High\";\n      decision = \"deny\";\n    } else if (level >= MEDIUM_THRESHOLD) {\n      severity = \"Medium\";\n      decision = \"allow\";\n    }\n\n    // 사람이 읽기 쉬운 판정 이유 문구 생성\n    const reason = `level ${level} (rule ${rule}) → ${decision}`;\n\n    // 결과를 목록에 추가\n    results.push({\n      json: {\n        student: student,\n        src_ip: ip,\n        level: level,\n        rule: rule,\n        fail_count: 1,\n        severity: severity,\n        decision: decision,\n        reason: reason\n      }\n    });\n  }\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        64
+      ],
+      "id": "98482f80-9588-4362-ba8f-fb445348a660",
+      "name": "판정회수"
+    },
+    {
+      "parameters": {
+        "jsCode": "const out=[];\nfor (const item of $input.all()){\n  const b = (item.json ?? {}).body ?? item.json ?? {};\n  const events = b.alerts ?? b.events ?? [b];\n  \n  for(const e of events){\n    // IP가 없을 경우 임의의 샘플 IP 생성 또는 기존 값 유지\n    const ip = e.src_ip ?? e.ip ?? `192.168.1.${Math.floor(Math.random() * 250) + 1}`;\n    const title = e.rule ?? e.title ?? '집계 경보';\n    const student = e.student ?? '이상용';\n    \n    // decision을 임의로 'allow' 또는 'deny' 중 하나로 생성 (deny 비중을 높이려면 조건 조정 가능)\n    const decision = e.decision ?? (Math.random() < 0.7 ? 'deny' : 'allow');\n    \n    let kind = e.kind;\n    if(!kind){ \n      kind = /상관|복합/.test(title) ? 'correlation' : (/스프레이|spray/i.test(title) ? 'spray' : 'aggregation'); \n    }\n    \n    const emoji = kind === 'correlation' ? '🚨' : '⚠️';\n    const label = kind === 'correlation' ? '복합공격(네트워크+앱)' : (kind === 'spray' ? '계정 스프레이' : '집계 경보');\n    \n    out.push({\n      json: { \n        src_ip: ip, \n        student: student,\n        decision: decision,\n        kind, \n        title,\n        text: `${emoji} [${label}] 출발지 ${ip} — ${title} (student: ${student}, decision: ${decision})` \n      }\n    });\n  }\n}\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        352
+      ],
+      "id": "b6267df8-ae09-46c0-a728-1a81d3e921de",
+      "name": "판정회수1"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "security-alert",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -800,
+        352
+      ],
+      "id": "95c39c78-2639-459c-94a3-704060b4ad3e",
+      "name": "5- 복합공격",
+      "webhookId": "d101c364-f860-40fb-a41d-e3b5cb12238b"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ip-block",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -800,
+        208
+      ],
+      "id": "e5406df5-1059-4888-b2e9-26d56520ec35",
+      "name": "4- IP차단",
+      "webhookId": "0a701bfa-f0b9-40ca-bdda-5029c190c871"
+    },
+    {
+      "parameters": {
+        "jsCode": "const out=[];\nfor (const item of $input.all()){\n  const b=(item.json??{}).body ?? item.json ?? {};\n  const events=b.alerts ?? b.events ?? [b];\n  for(const e of events){\n    const ip=e.src_ip ?? e.ip; if(!ip) continue;\n    out.push({json:{ src_ip:ip,\n      title:`보안 인시던트: ${ip} (${e.rule ?? e.title ?? '자동 취합'})`,\n      severity:e.severity ?? 'High', student:e.student ?? 'lsy', hours:24 }});\n  }\n}\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        496
+      ],
+      "id": "ec09ab8c-e114-4a96-95b3-5f9ceaab97c3",
+      "name": "판정회수2"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "incident",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -800,
+        496
+      ],
+      "id": "1e8ef00c-6270-4c08-bf1b-7bd3bc45bbf6",
+      "name": "6- 인시던트 리포트",
+      "webhookId": "8a4e60d2-a2f5-4da0-b5e5-19cdfef34ef4"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst MAP = {\n  '100211': {\n    kind: '브루트포스',\n    action: 'block',\n    severity: 'High',\n    attack: 'T1110 Brute Force'\n  },\n  '100220': {\n    kind: '웹셸 의심',\n    action: 'record',\n    severity: 'Critical',\n    attack: 'T1505.003 Web Shell'\n  },\n  '100221': {\n    kind: '웹 파일 위변조',\n    action: 'record',\n    severity: 'Medium',\n    attack: 'T1565.001 Stored Data Manipulation'\n  },\n  '100222': {\n    kind: '실행형 파일 삭제',\n    action: 'record',\n    severity: 'High',\n    attack: 'T1070.004 File Deletion'\n  }\n};\n\nconst out = [];\n\nfor (const item of $input.all()) {\n  const b = item.json.body ?? item.json;\n  const events = b.alerts ?? b.events ?? [b];\n\n  if (!Array.isArray(events)) {\n    throw new Error('alerts 또는 events는 배열이어야 합니다.');\n  }\n\n  for (const e of events) {\n    if (!e || typeof e !== 'object') continue;\n\n    const ruleId = String(\n      e.rule_id ?? e.rule?.id ?? ''\n    ).trim();\n\n    if (!ruleId) {\n      throw new Error('Wazuh rule_id가 없습니다.');\n    }\n\n    const m = MAP[ruleId] ?? {\n      kind: '기타 Wazuh 경보',\n      action: 'record',\n      severity: 'Low',\n      attack: '-'\n    };\n\n    const ip = String(\n      e.srcip ?? e.src_ip ?? e.ip ?? ''\n    ).trim();\n\n    const agent = String(\n      e.agent?.name ?? e.agent ?? 'unknown-agent'\n    );\n\n    const file = String(e.file ?? '');\n    const user = String(e.user ?? e.username ?? '');\n    const description = String(\n      e.description ?? '상세 설명 없음'\n    );\n\n    const block =\n      m.action === 'block' &&\n      ip !== '' &&\n      ip !== '0.0.0.0';\n\n    const action = block ? 'block' : 'record';\n    const key = block ? ip : `wazuh:${agent}`;\n\n    const what = ip\n      ? `출발지 ${ip}`\n      : `파일 ${file || '-'} (${e.fim_event ?? '-'})`;\n\n    out.push({\n      json: {\n        kind: m.kind,\n        action,\n        severity: m.severity,\n        attack: m.attack,\n        rule_id: ruleId,\n        rule_level: e.rule_level ?? e.rule?.level ?? null,\n        description,\n        ip,\n        src_ip: ip,\n        user,\n        file,\n        agent,\n        key,\n        student: e.student ?? b.student ?? 'lsy',\n        source: 'wazuh',\n        reason: `[Wazuh ${ruleId}] ${description} - ${what} (${m.attack})`.slice(0, 200)\n      }\n    });\n  }\n}\n\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        640
+      ],
+      "id": "1321225a-8dca-46f3-835b-3b76565f3577",
+      "name": "판정"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/security/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-KEY",
+              "value": "0d407335238b40cbe72c980e160d21ac60cf216a3cc73f9546e52d32f97f23f2"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "=\n{{ JSON.stringify((() => {\n  const e = $('판정').item.json;\n\n  const result = {\n    student: e.student,\n    decision: e.action === 'block' ? 'deny' : 'record',\n    reason: e.reason,\n    severity: e.severity,\n    source: 'wazuh'\n  };\n\n  if (e.ip) {\n    result.src_ip = e.ip;\n  }\n\n  return result;\n})()) }}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -304,
+        656
+      ],
+      "id": "ae7665d0-668f-4c60-ad13-09bfe0693230",
+      "name": "보안 이벤트 기록",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/admin/block",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-KEY",
+              "value": "0d407335238b40cbe72c980e160d21ac60cf216a3cc73f9546e52d32f97f23f2"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  ip: $json.ip,\n  reason: $json.reason,\n  student: $json.student,\n  severity: $json.severity,\n  source: \"wazuh-block\"\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -416,
+        576
+      ],
+      "id": "b1745daa-42b2-41b1-9d08-9f3e4e561242",
+      "name": "ip 차단",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "98e38421-6015-4c82-af73-8be3e434503c",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "block",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -544,
+        640
+      ],
+      "id": "83b56f8b-1640-406d-a02b-dfb8ed39ffac",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wazuh-alert",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -800,
+        640
+      ],
+      "id": "a29f1ae7-05d3-41b1-9206-009ce6f7abb6",
+      "name": "7- wazuh 경보",
+      "webhookId": "27dddba6-1cf0-490c-8a98-3cd0ba47eda8"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Graylog 집계 이벤트(브루트포스)에서 잠금 대상 생성\nconst out = [];\nfor (const item of $input.all()) {\n  const j = item.json ?? {};\n  const b = j.body ?? j;\n  const events = b.alerts ?? b.events ?? (b.username ? [b] : []);\n  for (const e of events) {\n    const user = e.username ?? e.user;\n    if (!user) continue;\n    const cnt = e.count ?? e.fail_count ?? '?';\n    out.push({ json: {\n      username: user,\n      reason: `브루트포스 자동 잠금: ${cnt}회 로그인 실패`,\n      fail_count: Number(e.count ?? e.fail_count ?? 0),\n      src_ip: e.src_ip ?? '0.0.0.0',\n      student: e.student ?? b.student ?? 'lsy',\n      severity: 'High', source: 'login-guard',\n    }});\n  }\n}\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        784
+      ],
+      "id": "01df6b17-9f65-4da1-a00b-0bc03e3fce02",
+      "name": "판정(잠금)"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "login-bruteforce",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -800,
+        784
+      ],
+      "id": "e4f6fbd7-ac64-4f16-9b48-c034cc265066",
+      "name": "8- 브루트포스 계정잠금",
+      "webhookId": "7e551635-651e-41de-a666-a0fb543f0f6c"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Graylog 집계 이벤트(다수 실패가 같은 src_ip) → IP 실차단 payload\nconst out = [];\nfor (const item of $input.all()) {\n  const b = (item.json ?? {}).body ?? item.json ?? {};\n  const events = b.alerts ?? b.events ?? (b.src_ip ? [b] : []);\n  for (const e of events) {\n    const ip = e.src_ip ?? e.ip;\n    if (!ip || ip === '0.0.0.0') continue;         // 출발지 IP 없으면 차단 불가(스킵)\n    const cnt = e.count ?? e.fail_count ?? '?';\n    out.push({ json: {\n      ip: ip, src_ip: ip,\n      reason: `공격 출발지 자동 차단: ${cnt}회 로그인 실패(동일 IP)`,\n      fail_count: Number(e.count ?? e.fail_count ?? 0),\n      username: e.username ?? e.user ?? '', student: e.student ?? 'lsy',\n      severity: 'High', source: 'ip-guard',\n    }});\n  }\n}\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        928
+      ],
+      "id": "efbe7ea0-0c91-409a-8a25-1ef0996e9422",
+      "name": "판정회수3"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "snort-ip-block",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -800,
+        928
+      ],
+      "id": "7f6f10f4-8c5c-48e3-88fa-9ab4ad0279ca",
+      "name": "9- 웹스캐너 404 폭주 탐지",
+      "webhookId": "5375d542-003b-42b2-86ad-712c0054c24e"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/internal/ip-block",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-KEY",
+              "value": "0d407335238b40cbe72c980e160d21ac60cf216a3cc73f9546e52d32f97f23f2"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -1120,
+        448
+      ],
+      "id": "e16a5870-8c94-4dae-a52f-04378fc6189d",
+      "name": "HTTP ip-block요청"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/admin/block",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-KEY",
+              "value": "0d407335238b40cbe72c980e160d21ac60cf216a3cc73f9546e52d32f97f23f2"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -160,
+        832
+      ],
+      "id": "cf41b6ed-7a63-4c63-8777-06f0586cfcec",
+      "name": "HTTP 계정 block 요청",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/admin/incident",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-KEY",
+              "value": "0d407335238b40cbe72c980e160d21ac60cf216a3cc73f9546e52d32f97f23f2"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -80,
+        496
+      ],
+      "id": "cf64e3fa-9b81-433b-96a7-df2cb5dd94d4",
+      "name": "HTTP 인시던트",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "priv-guard",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -800,
+        64
+      ],
+      "id": "6e74c892-c053-40af-9f01-e5671aaa613b",
+      "name": "1- 자동 회수",
+      "webhookId": "33fe9d26-8887-4ab3-8a99-68def1f0fcb5"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/security/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "0d407335238b40cbe72c980e160d21ac60cf216a3cc73f9546e52d32f97f23f2"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"student\": \"{{ $json.student }}\",\n  \"src_ip\": \"{{ $json.src_ip }}\",\n  \"decision\": \"{{ $json.decision }}\",\n  \"severity\": \"{{ $json.severity }}\",\n  \"reason\": \"{{ $json.reason }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -544,
+        784
+      ],
+      "id": "c515c3b1-1905-48ed-a0f7-4af324906086",
+      "name": "대시보드 POST1",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/security/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "0d407335238b40cbe72c980e160d21ac60cf216a3cc73f9546e52d32f97f23f2"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"student\": \"{{ $json.student }}\",\n  \"src_ip\": \"{{ $json.src_ip }}\",\n  \"decision\": \"{{ $json.decision }}\",\n  \"severity\": \"{{ $json.severity }}\",\n  \"reason\": \"{{ $json.reason }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -544,
+        496
+      ],
+      "id": "bbb7a7e5-86d7-4f55-b4ed-d66ca94d0951",
+      "name": "대시보드 POST3",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/security/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "0d407335238b40cbe72c980e160d21ac60cf216a3cc73f9546e52d32f97f23f2"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"student\": \"{{ $json.student }}\",\n  \"src_ip\": \"{{ $json.src_ip }}\",\n  \"decision\": \"{{ $json.decision }}\",\n  \"severity\": \"{{ $json.severity }}\",\n  \"reason\": \"{{ $json.reason }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -544,
+        352
+      ],
+      "id": "098dd478-ca20-4b45-b06f-7ac396ba77ca",
+      "name": "대시보드 POST4",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/security/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "0d407335238b40cbe72c980e160d21ac60cf216a3cc73f9546e52d32f97f23f2"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"student\": \"{{ $json.student }}\",\n  \"src_ip\": \"{{ $json.src_ip }}\",\n  \"decision\": \"{{ $json.decision }}\",\n  \"severity\": \"{{ $json.severity }}\",\n  \"reason\": \"{{ $json.reason }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -544,
+        208
+      ],
+      "id": "9ebe69dc-978d-4561-9e0d-5f4d4d86931f",
+      "name": "대시보드 POST5",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/security/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "0d407335238b40cbe72c980e160d21ac60cf216a3cc73f9546e52d32f97f23f2"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"student\": \"{{ $json.student }}\",\n  \"src_ip\": \"{{ $json.src_ip }}\",\n  \"decision\": \"{{ $json.decision }}\",\n  \"severity\": \"{{ $json.severity }}\",\n  \"reason\": \"{{ $json.reason }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -544,
+        64
+      ],
+      "id": "61df00fd-7098-4e66-9f4d-2301b7e4fd86",
+      "name": "대시보드 POST6",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// K09 전용: Graylog PCAP 통계 이벤트 -> Discord 메시지 (차단 API 실행 없음)\nconst out = [];\nconst val = (v, fallback='정보 없음') => (v === undefined || v === null || String(v).trim()==='' ? fallback : String(v));\nconst safe = (v, max=950) => val(v).replace(/@/g,'@\\u200b').slice(0,max);\nfor (const item of $input.all()) {\n  const b = item.json?.body ?? item.json ?? {};\n  const evs = Array.isArray(b.alerts) ? b.alerts : (Array.isArray(b.events) ? b.events : [b]);\n  for (const e of evs) {\n    if (!e || typeof e !== 'object') continue;\n    const title = val(e.event_definition ?? e.rule ?? b.event_definition ?? b.rule, 'K09 패킷 트래픽 경보');\n    const ip = val(e.src_ip ?? e.ip ?? e.event_key ?? e.group_key ?? b.src_ip ?? b.event_key);\n    const severity = /K09-02|SYN/i.test(title) ? 'High' : 'Medium';\n    const fields = [\n      {name:'📌 탐지 규칙',value:safe(title),inline:false},\n      {name:'🌐 출발지 IP',value:safe(ip),inline:true},\n      {name:'⚙️ 대응',value:'탐지·경보 (자동 차단 미수행)',inline:true},\n      {name:'🆔 Graylog 이벤트',value:safe(e.event_id ?? b.event_id),inline:false}\n    ];\n    for (const [key,label] of [['packet_count','패킷 수'],['tcp_syn_count','TCP SYN 수'],['unique_dst_ports','목적지 포트 종류'],['unique_dst_ips','목적지 IP 종류']]) {\n      const v = e[key] ?? b[key];\n      if (v !== undefined && v !== null && String(v) !== '') fields.push({name:'📊 '+label,value:safe(v),inline:true});\n    }\n    out.push({json:{\n      username:'Security Alert Bot',allowed_mentions:{parse:[]},\n      embeds:[{title:'['+severity.toUpperCase()+'] 📡 K09 패킷·트래픽 분석 경보',\n        description:'실제 PCAP에서 추출한 통계에 대한 Graylog 탐지 이벤트입니다. 임계치 초과는 공격 확정을 의미하지 않습니다.',\n        color: severity==='High' ? 0xED4245 : 0xFEE75C,fields:fields.slice(0,25),\n        footer:{text:'Graylog → n8n → Discord | K09 탐지 알림'},timestamp:new Date().toISOString()}]\n    }});\n  }\n}\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        1072
+      ],
+      "id": "dd888b7a-1440-4f06-bdac-b19b2963be28",
+      "name": "판정회수4"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "packet-traffic-alert",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -800,
+        1072
+      ],
+      "id": "586de4aa-05e1-456b-9e88-cfafca786da8",
+      "name": "패킷 트래픽 분석",
+      "webhookId": "436ef831-9e54-4cbb-b7d5-9fce03d4bf12"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "security-scenario-alert",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -800,
+        1216
+      ],
+      "id": "e67349ec-6d24-449b-976f-8debd027829a",
+      "name": "EX- 공방전 추가 8종 경보",
+      "webhookId": "a5edcbc3-54dc-4cbb-bd4c-c15be99f39ef"
+    },
+    {
+      "parameters": {
+        "jsCode": "// EX-01~08: Graylog 통합 이벤트를 Discord 경보로 변환; 모든 판단은 탐지·알림만 수행\nconst out = [];\nconst str = (v, fallback='정보 없음') => v === undefined || v === null || String(v).trim()==='' ? fallback : String(v);\nconst safe = (v, max=950) => str(v).replace(/@/g, '@\\u200b').slice(0,max);\nconst labels = {\n 'EX-01':'포트 스캔', 'EX-02':'SYN Flood 의심', 'EX-03':'저속 로그인 시도',\n 'EX-04':'심야 로그인 성공', 'EX-05':'SQL Injection 의심',\n 'EX-06':'내부 비인가 접근', 'EX-07':'로그 변조·삭제', 'EX-08':'Nikto 스캐너 식별'\n};\nfor (const item of $input.all()) {\n  const b = item.json?.body ?? item.json ?? {};\n  const evs = Array.isArray(b.alerts) ? b.alerts : (Array.isArray(b.events) ? b.events : [b]);\n  for (const e of evs) {\n    if (!e || typeof e !== 'object') continue;\n    const title = str(e.event_definition ?? e.rule ?? b.event_definition ?? b.rule, 'EX 보안 탐지 이벤트');\n    const exId = (title.match(/EX-0[1-8]/i)||[])[0]?.toUpperCase() || '';\n    const label = labels[exId] ?? '공방전 시나리오';\n    const group = str(e.group_key ?? e.event_key ?? b.group_key ?? b.event_key);\n    // 현재 공통 Notification은 event.key만 넘길 수 있으므로 IP/계정 종류를 단정하지 않음.\n    const sevNum = Number(e.severity ?? b.severity);\n    const severity = [ 'EX-02', 'EX-05', 'EX-06', 'EX-07' ].includes(exId) || sevNum >= 3 ? 'High' : 'Medium';\n    const fields = [\n      {name:'🛡️ 탐지 유형',value:safe(label),inline:true},\n      {name:'📌 Graylog 규칙',value:safe(title),inline:false},\n      {name:'🔑 그룹 키 (IP·계정·호스트)',value:safe(group),inline:true},\n      {name:'⚙️ 대응',value:'탐지·알림 (자동 차단 미수행)',inline:true},\n      {name:'🆔 이벤트 ID',value:safe(e.event_id ?? b.event_id),inline:false}\n    ];\n    out.push({json:{username:'Security Alert Bot',allowed_mentions:{parse:[]},embeds:[{\n      title:'['+severity.toUpperCase()+'] 🚨 '+label,\n      description:'Graylog 추가 공방전 시나리오 탐지 이벤트입니다. 공격 여부는 원본 로그와 함께 검토하세요.',\n      color:severity==='High'?0xED4245:0xFEE75C, fields,\n      footer:{text:'Graylog → n8n → Discord | EX-01~08 알림'},timestamp:new Date().toISOString()\n    }]}});\n  }\n}\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        1216
+      ],
+      "id": "18eac552-8cbf-4c8d-af34-f6795b01c2aa",
+      "name": "EX- 경보 메시지 생성"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/security/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "0d407335238b40cbe72c980e160d21ac60cf216a3cc73f9546e52d32f97f23f2"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"student\": \"{{ $json.student }}\",\n  \"src_ip\": \"{{ $json.src_ip }}\",\n  \"decision\": \"{{ $json.decision }}\",\n  \"severity\": \"{{ $json.severity }}\",\n  \"reason\": \"{{ $json.reason }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -544,
+        1072
+      ],
+      "id": "7fcad498-f5b4-415b-94ab-a69570f2d534",
+      "name": "대시보드 POST2",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:5000/api/security/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "0d407335238b40cbe72c980e160d21ac60cf216a3cc73f9546e52d32f97f23f2"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"student\": \"{{ $json.student }}\",\n  \"src_ip\": \"{{ $json.src_ip }}\",\n  \"decision\": \"{{ $json.decision }}\",\n  \"severity\": \"{{ $json.severity }}\",\n  \"reason\": \"{{ $json.reason }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -544,
+        1216
+      ],
+      "id": "2d6cdc80-b103-417f-8eff-adc18ddfb611",
+      "name": "대시보드 POST7",
+      "disabled": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "판정함수": {
+      "main": [
+        [
+          {
+            "node": "대시보드 POST5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "메시지": {
+      "main": [
+        [
+          {
+            "node": "디스코드",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "메시지 거부": {
+      "main": [
+        [
+          {
+            "node": "디스코드",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "메시지 허용": {
+      "main": [
+        [
+          {
+            "node": "디스코드",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "메시지 거부",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "메시지 허용",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "판정회수": {
+      "main": [
+        [
+          {
+            "node": "대시보드 POST6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "판정회수1": {
+      "main": [
+        [
+          {
+            "node": "대시보드 POST4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5- 복합공격": {
+      "main": [
+        [
+          {
+            "node": "판정회수1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4- IP차단": {
+      "main": [
+        [
+          {
+            "node": "판정함수",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "판정회수2": {
+      "main": [
+        [
+          {
+            "node": "대시보드 POST3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "6- 인시던트 리포트": {
+      "main": [
+        [
+          {
+            "node": "판정회수2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "판정": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "보안 이벤트 기록": {
+      "main": [
+        [
+          {
+            "node": "HTTP 인시던트",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ip 차단": {
+      "main": [
+        [
+          {
+            "node": "보안 이벤트 기록",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "ip 차단",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "보안 이벤트 기록",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "7- wazuh 경보": {
+      "main": [
+        [
+          {
+            "node": "판정",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "판정(잠금)": {
+      "main": [
+        [
+          {
+            "node": "대시보드 POST1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "8- 브루트포스 계정잠금": {
+      "main": [
+        [
+          {
+            "node": "판정(잠금)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "판정회수3": {
+      "main": [
+        [
+          {
+            "node": "대시보드 POST",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9- 웹스캐너 404 폭주 탐지": {
+      "main": [
+        [
+          {
+            "node": "판정회수3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP 계정 block 요청": {
+      "main": [
+        [
+          {
+            "node": "메시지",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP 인시던트": {
+      "main": [
+        [
+          {
+            "node": "메시지",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1- 자동 회수": {
+      "main": [
+        [
+          {
+            "node": "판정회수",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "대시보드 POST1": {
+      "main": [
+        [
+          {
+            "node": "HTTP 계정 block 요청",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "대시보드 POST": {
+      "main": [
+        [
+          {
+            "node": "HTTP 계정 block 요청",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "대시보드 POST3": {
+      "main": [
+        [
+          {
+            "node": "HTTP 인시던트",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "대시보드 POST4": {
+      "main": [
+        [
+          {
+            "node": "메시지",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "대시보드 POST5": {
+      "main": [
+        [
+          {
+            "node": "메시지",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "대시보드 POST6": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "패킷 트래픽 분석": {
+      "main": [
+        [
+          {
+            "node": "판정회수4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "판정회수4": {
+      "main": [
+        [
+          {
+            "node": "대시보드 POST2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EX- 공방전 추가 8종 경보": {
+      "main": [
+        [
+          {
+            "node": "EX- 경보 메시지 생성",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EX- 경보 메시지 생성": {
+      "main": [
+        [
+          {
+            "node": "대시보드 POST7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "대시보드 POST2": {
+      "main": [
+        [
+          {
+            "node": "메시지",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "대시보드 POST7": {
+      "main": [
+        [
+          {
+            "node": "메시지",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "63da460c-0c93-457e-9b7a-675f1b9088f5",
+  "meta": {
+    "instanceId": "4a934aac048ce867e75b4eca77f8e6e23229dc0437fe856fcf417e743bd4f190"
+  },
+  "nodeGroups": [],
+  "id": "jcLiGyXwp3sXg1qH",
+  "tags": []
+}
