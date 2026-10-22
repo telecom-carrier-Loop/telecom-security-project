@@ -329,3 +329,49 @@ a.tool-card:hover { border-color: var(--signal); }
 .grafana-snippet .panel__head { padding: 1rem 1.25rem 0.5rem; }
 .grafana-snippet .muted { padding: 0 1.25rem 1.25rem; }
 .grafana-snippet .grafana-frame { border: none; border-radius: 0 0 var(--radius) var(--radius); }
+/* ---------- 상단 메뉴 드롭다운 (이름 메뉴·보안·관제 도구) ---------- */
+.dropdown { position: relative; }
+.dropdown__btn { font: inherit; font-weight: 500; font-size: 0.9rem; background: none; border: 1px solid var(--line);
+  border-radius: 8px; padding: 0.45rem 0.75rem; cursor: pointer; color: inherit; display: inline-flex; align-items: center; gap: 0.35rem; }
+.dropdown__btn:hover { border-color: var(--signal); }
+.dropdown__caret { font-size: 0.7rem; opacity: 0.8; }
+.nav__drop .dropdown__btn { border-color: transparent; }
+.nav__drop--active .dropdown__btn { background: color-mix(in srgb, var(--signal) 10%, transparent); color: var(--signal); }
+.user-menu { color: var(--ink); min-width: 180px; }
+.user-menu--left { left: 0; right: auto; }
+.user-menu--right { right: 0; left: auto; }
+.user-menu li { list-style: none; }
+.user-menu a, .user-menu button { color: var(--ink); font-size: 0.9rem; }
+.user-menu a[aria-current='page'] { color: var(--signal); font-weight: 600; }
+.user-menu a:focus-visible, .user-menu button:focus-visible { outline: 2px solid var(--signal); outline-offset: -2px; }
+.user-menu__meta { display: block; padding: 0.55rem 1rem 0.45rem; font-size: 0.78rem; color: var(--ink-soft); }
+.user-menu__sep { height: 1px; background: var(--line); margin: 0.3rem 0; }
+/* 관리자 상단(어두운 배경): 버튼 글자만 밝게, 펼친 메뉴는 흰 배경 + 진한 글자 */
+.shell--admin .dropdown__btn { color: #e6ebf1; border-color: rgba(255, 255, 255, 0.25); }
+.shell--admin .nav__drop .dropdown__btn { border-color: transparent; }
+.shell--admin .nav__drop .dropdown__btn:hover { background: rgba(255, 255, 255, 0.08); }
+.shell--admin .nav__drop--active .dropdown__btn { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.shell--admin .user-menu { color: var(--ink); }
+.shell--admin .user-menu a, .shell--admin .user-menu button { color: var(--ink); }
+.shell--admin .user-menu__meta { color: var(--ink-soft); }
+.topnav__menu .dropdown { display: inline-block; }
+
+/* ---------- 공지사항 ---------- */
+.notice-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.notice-list__item a { display: flex; flex-direction: column; gap: 0.3rem; padding: 1rem 1.25rem; background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink); text-decoration: none; }
+.notice-list__item a:hover { border-color: var(--signal); }
+.notice-list__item--pinned a { border-left: 3px solid var(--signal); }
+.notice-detail__body { white-space: pre-wrap; line-height: 1.75; margin: 1rem 0 0; }
+.check { display: inline-flex; flex-direction: row; align-items: center; gap: 0.4rem; }
+/* ---------- 포인트 상점 ---------- */
+.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.shop-card { display: flex; flex-direction: column; gap: 0.5rem; }
+.shop-card__name { font-size: 1.05rem; margin: 0.25rem 0 0; }
+.shop-card__foot { display: flex; justify-content: space-between; align-items: baseline; margin-top: auto; }
+.shop-card--off { opacity: 0.65; }
+.row--current td { font-weight: 600; background: color-mix(in srgb, var(--signal) 6%, transparent); }
+/* ---------- 카카오페이 버튼 (공식 색상) ---------- */
+.btn--kakao { background: #FEE500; color: #191919; border-color: #FEE500; }
+.btn--kakao:hover { background: #F4DC00; }
+.shell--admin .topnav__user .user-menu { min-width: 230px; }

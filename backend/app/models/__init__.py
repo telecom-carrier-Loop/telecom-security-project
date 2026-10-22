@@ -4,6 +4,8 @@ from .billing import Invoice, Payment, PaymentEvent
 from .incident import IncidentHistory, SecurityIncident
 from .membership import Benefit, BenefitRedemption, MembershipAccount, MembershipTier, PointTransaction
 from .protection import IpBlock, IpWhitelist, SecurityAuditLog
+from .shop import ShopItem, ShopOrder
+from .notice import Notice
 from .plan import Plan, Subscription, UsageRecord
 from .support import SupportReply, SupportTicket
 from .user import User
@@ -12,5 +14,5 @@ __all__ = [
     "User", "AuthSession", "AuthLoginFailure", "Plan", "Subscription", "UsageRecord", "SupportTicket", "SupportReply",
     "MembershipTier", "MembershipAccount", "PointTransaction", "Benefit", "BenefitRedemption",
     "Invoice", "Payment", "PaymentEvent", "SecurityIncident", "IncidentHistory",
-    "IpBlock", "IpWhitelist", "SecurityAuditLog",
+    "IpBlock", "IpWhitelist", "SecurityAuditLog", "ShopItem", "ShopOrder", "Notice",
 ]

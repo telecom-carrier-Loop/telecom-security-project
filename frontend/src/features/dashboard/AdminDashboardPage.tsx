@@ -15,11 +15,12 @@ const SEVERITIES: [Severity, string][] = [
 export default function AdminDashboardPage() {
   const { user } = useAuth()
   const { loading, error, data, reload } = useApi<AdminDashboard>('/admin/dashboard')
-  const mon = useApi<{ links: MonitoringLink[]; grafana_embed_url: string | null }>('/admin/monitoring-links')
+  const mon = useApi<{ links: MonitoringLink[]; grafana_embed_url: string | null; grafana_panel_url: string | null }>('/admin/monitoring-links')
   if (loading) return <Loading />
   if (error || !data) return <ErrorState error={error} onRetry={reload} />
   const { customers, support, billing, incidents, protection } = data
-  const embedUrl = mon.data?.grafana_embed_url ?? null
+  // 대시보드에는 그래프 하나(GRAFANA_PANEL_URL)만, 전체는 관제 지표 화면에서
+  const embedUrl = mon.data?.grafana_panel_url ?? null
 
   return (
     <section className="page">
@@ -93,8 +94,8 @@ export default function AdminDashboardPage() {
       <h2 className="section-title">관제 지표</h2>
       <article className="panel grafana-snippet">
         <header className="panel__head">
-          <h2>Grafana</h2>
-          <Link to="/admin/grafana">전체 보기</Link>
+          <h2>관제 그래프</h2>
+          <Link to="/admin/grafana">관제 지표 전체 보기</Link>
         </header>
         {mon.loading ? (
           <Loading label="관제 화면 불러오는 중" />
@@ -108,7 +109,7 @@ export default function AdminDashboardPage() {
           />
         ) : (
           <p className="muted">
-            서버 <span className="mono">GRAFANA_EMBED_URL</span>이 없으면 여기에 그래프가 표시되지 않습니다.
+            서버 <span className="mono">.env</span>에 <span className="mono">GRAFANA_PANEL_URL</span>(Grafana 패널 Share → Embed 의 주소)을 넣으면 그래프 하나가 여기에 표시됩니다.
             <Link to="/admin/grafana"> 설정 안내 보기</Link>
           </p>
         )}
