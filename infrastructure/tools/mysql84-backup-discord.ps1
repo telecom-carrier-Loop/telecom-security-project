@@ -1,7 +1,7 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$RepositoryPath,
-    [ValidateSet('SaveWebhook', 'TestAlert', 'Check', 'Install', 'Status')][string]$Action = 'Status'
+    [ValidateSet('SaveWebhook', 'Update', 'TestAlert', 'Check', 'Install', 'Status')][string]$Action = 'Status'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -77,16 +77,62 @@ function Read-UtcTime([string]$Value) {
     if ([string]::IsNullOrWhiteSpace($Value)) { throw 'Missing timestamp.' }
     [DateTimeOffset]::Parse($Value, [Globalization.CultureInfo]::InvariantCulture).UtcDateTime
 }
+function Format-MessageTime([string]$Value) {
+    if ([string]::IsNullOrWhiteSpace($Value)) { return '확인할 수 없음' }
+    ([DateTimeOffset](Read-UtcTime $Value)).ToOffset([TimeSpan]::FromHours(9)).ToString("yyyy-MM-dd HH:mm:ss 'KST'")
+}
+function Format-Elapsed([string]$StartedUtc, [string]$CheckedUtc) {
+    $seconds=[Math]::Max(0,[Math]::Floor(((Read-UtcTime $CheckedUtc)-(Read-UtcTime $StartedUtc)).TotalSeconds))
+    $hours=[Math]::Floor($seconds/3600); $minutes=[Math]::Floor(($seconds%3600)/60); $remainder=$seconds%60
+    if ($hours -gt 0) { return ('{0}시간 {1}분 {2}초' -f $hours,$minutes,$remainder) }
+    '{0}분 {1}초' -f $minutes,$remainder
+}
+function Get-NotificationMessage($Report, [bool]$Recovery=$false) {
+    $lines=[Collections.Generic.List[string]]::new()
+    if ($Recovery) { $lines.Add('[RECOVERY] PC2 MySQL 백업 정상화') }
+    else { $lines.Add('[ALERT] PC2 MySQL 백업 이상') }
+    $lines.Add('확인 시각: '+(Format-MessageTime $Report.CheckedUtc))
+    if ($Recovery) { $lines.Add('백업 감시 항목이 정상 상태로 돌아왔습니다.') }
+    else {
+        foreach ($issue in $Report.Issues) {
+            $text=switch ($issue) {
+                'no-success-within-90-minutes' { (Format-MessageTime $Report.LastSuccessUtc)+' 마지막 백업 성공 이후 '+(Format-Elapsed $Report.LastSuccessUtc $Report.CheckedUtc)+' 동안 새 백업이 성공적으로 완료되지 않았습니다. (기준: 90분)' }
+                'backup-running-over-12-minutes' {
+                    if ($Report.RunningStartedUtc) { '백업 작업이 '+(Format-MessageTime $Report.RunningStartedUtc)+'에 시작된 뒤 '+(Format-Elapsed $Report.RunningStartedUtc $Report.CheckedUtc)+' 동안 완료되지 않았습니다. (기준: 12분)' }
+                    else { '백업 실행 상태가 12분을 초과했습니다. 시작 시각은 확인할 수 없습니다.' }
+                }
+                'backup-failed' { '최근 백업 작업이 실패했습니다.' }
+                'backup-task-exit-nonzero' { '백업 예약 작업이 오류 코드로 종료됐습니다.' }
+                'backup-task-not-ready' { '백업 예약 작업이 비활성화됐거나 정상 대기 상태가 아닙니다.' }
+                'backup-task-unavailable' { '백업 예약 작업을 찾거나 조회할 수 없습니다.' }
+                'backup-run-record-invalid' { '최근 백업 실행 기록이 없거나 손상돼 상태를 확인할 수 없습니다.' }
+                'backup-success-record-invalid' { '백업 성공 기록이 없거나 손상돼 마지막 성공 시각을 확인할 수 없습니다.' }
+                'last-backup-files-unavailable' { '마지막 성공 백업의 덤프 또는 manifest 파일을 찾을 수 없습니다.' }
+                'monitor-incident-record-invalid' { '이전 알림 상태 기록이 손상됐습니다.' }
+                default { '백업 감시 중 확인이 필요한 상태가 감지됐습니다.' }
+            }
+            $lines.Add('- '+$text)
+        }
+    }
+    if ($Report.Issues -notcontains 'no-success-within-90-minutes') { $lines.Add('마지막 백업 성공: '+(Format-MessageTime $Report.LastSuccessUtc)) }
+    if (-not $Recovery -and $Report.LastRunStartedUtc) {
+        $lines.Add('최근 백업 시작: '+(Format-MessageTime $Report.LastRunStartedUtc))
+        if ($Report.LastRunCompletedUtc) { $lines.Add('최근 백업 종료: '+(Format-MessageTime $Report.LastRunCompletedUtc)+' / 소요 '+(Format-Elapsed $Report.LastRunStartedUtc $Report.LastRunCompletedUtc)) }
+    }
+    $lines.Add('PC2 Windows에서 백업 Status를 확인해 주세요.')
+    $lines -join "`n"
+}
 function Get-BackupHealth {
     $now = [DateTime]::UtcNow
     $issues = [Collections.Generic.List[string]]::new()
-    $pending = $false; $successUtc = ''
+    $pending = $false; $successUtc = ''; $runStartedUtc=''; $runCompletedUtc=''; $runningStartedUtc=''
     try {
         $task = Get-ScheduledTask -TaskName $backupTaskName -TaskPath '\' -ErrorAction Stop
         $info = Get-ScheduledTaskInfo -TaskName $backupTaskName -TaskPath '\' -ErrorAction Stop
         if ([string]$task.State -notin @('Ready','Running')) { $issues.Add('backup-task-not-ready') }
         if ([string]$task.State -eq 'Running') {
             $pending=$true
+            $runningStartedUtc=$info.LastRunTime.ToUniversalTime().ToString('o')
             if (($now-$info.LastRunTime.ToUniversalTime()).TotalMinutes -gt $config.RunningMinutes) { $issues.Add('backup-running-over-12-minutes') }
         }
         elseif ($info.LastTaskResult -ne 0) { $issues.Add('backup-task-exit-nonzero') }
@@ -96,10 +142,12 @@ function Get-BackupHealth {
         $last = Read-MonitorJson (Join-Path $scheduler 'last-run.json')
         $started = Read-UtcTime $last.StartedUtc
         if ($started -gt $now.AddMinutes(5)) { throw 'Future timestamp.' }
+        $runStartedUtc=$started.ToString('o')
         switch ($last.Status) {
             'failed' { $issues.Add('backup-failed') }
             'running' {
                 $pending=$true
+                if (-not $runningStartedUtc -or $started -lt (Read-UtcTime $runningStartedUtc)) { $runningStartedUtc=$started.ToString('o') }
                 if (($now-$started).TotalMinutes -gt $config.RunningMinutes) { $issues.Add('backup-running-over-12-minutes') }
             }
             'success' {
@@ -108,14 +156,19 @@ function Get-BackupHealth {
             }
             default { throw 'Unknown backup status.' }
         }
+        if ($last.Status -in @('success','failed')) {
+            $completed=Read-UtcTime $last.CompletedUtc
+            if ($completed -lt $started -or $completed -gt $now.AddMinutes(5)) { throw 'Invalid completion time.' }
+            $runCompletedUtc=$completed.ToString('o')
+        }
     }
     catch { $issues.Add('backup-run-record-invalid') }
     try {
         $success = Read-MonitorJson (Join-Path $scheduler 'last-success.json')
         $completed = Read-UtcTime $success.CompletedUtc
         $started = Read-UtcTime $success.StartedUtc
-        $successUtc = $completed.ToString('o')
         if ($success.Status -ne 'success' -or $success.ExitCode -ne 0 -or $completed -lt $started -or $completed -gt $now.AddMinutes(5)) { throw 'Invalid success record.' }
+        $successUtc = $completed.ToString('o')
         if (($now-$completed).TotalMinutes -gt $config.StaleMinutes) { $issues.Add('no-success-within-90-minutes') }
         if ((Split-Path -Path $success.BackupDirectory -Parent) -ne $backupRoot -or
             -not (Test-Path -LiteralPath (Join-Path $success.BackupDirectory 'manifest.json') -PathType Leaf) -or
@@ -124,7 +177,7 @@ function Get-BackupHealth {
     catch { $issues.Add('backup-success-record-invalid') }
     $status='healthy'
     if ($issues.Count -gt 0) { $status='alert' } elseif ($pending) { $status='pending' }
-    [PSCustomObject]@{CheckedUtc=$now.ToString('o'); Status=$status; Issues=@($issues.ToArray() | Sort-Object -Unique); LastSuccessUtc=$successUtc; Delivery='not-needed'}
+    [PSCustomObject]@{CheckedUtc=$now.ToString('o'); Status=$status; Issues=@($issues.ToArray() | Sort-Object -Unique); LastSuccessUtc=$successUtc; LastRunStartedUtc=$runStartedUtc; LastRunCompletedUtc=$runCompletedUtc; RunningStartedUtc=$runningStartedUtc; Delivery='not-needed'}
 }
 
 if ($Action -eq 'SaveWebhook') {
@@ -152,16 +205,44 @@ if ($Action -eq 'SaveWebhook') {
     return
 }
 $config=Read-MonitorConfig
+if ($Action -eq 'Update') {
+    # This update path is for the verified webhook/test stage, before installing the monitor task.
+    if (Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction SilentlyContinue) { throw 'Monitor task already installed. This update requires the pre-install stage; no files were changed.' }
+    if ($PSCommandPath -eq $workerFile) { throw 'Run Update from the newly downloaded source, not the installed worker.' }
+    try { $updateLock=[IO.File]::Open((Join-Path $root 'check.lock'),'OpenOrCreate','ReadWrite','None') }
+    catch { throw 'Another monitor check is running. Wait before updating.' }
+    $previousWorker=[IO.File]::ReadAllBytes($workerFile)
+    $previousConfig=[IO.File]::ReadAllBytes($configFile)
+    $replacement=Join-Path $root ('update-'+[guid]::NewGuid().ToString('N')+'.tmp')
+    try {
+        Copy-Item -LiteralPath $PSCommandPath -Destination $replacement
+        [IO.File]::Replace($replacement,$workerFile,[NullString]::Value)
+        $config.WorkerSha256=(Get-FileHash -LiteralPath $workerFile).Hash
+        Write-MonitorJson $configFile $config
+        $null=Read-MonitorConfig
+    }
+    catch {
+        [IO.File]::WriteAllBytes($workerFile,$previousWorker)
+        [IO.File]::WriteAllBytes($configFile,$previousConfig)
+        throw 'Monitor update failed; previous worker and configuration restored. Webhook and backup settings were retained.'
+    }
+    finally {
+        if (Test-Path -LiteralPath $replacement) { Remove-Item -LiteralPath $replacement -Force }
+        $updateLock.Dispose()
+    }
+    Write-Host 'PASS: monitor message code updated. Saved webhook and backup settings retained. Next run TestAlert.'
+    return
+}
 if ($Action -eq 'TestAlert') {
-    Send-MonitorMessage ('[TEST] PC2 MySQL backup Discord delivery test. No backup failure, restore, DB change or recovery was triggered. UTC=' + [DateTime]::UtcNow.ToString('o'))
-    Write-MonitorJson $receiptFile ([PSCustomObject]@{DeliveredUtc=[DateTime]::UtcNow.ToString('o'); Kind='test-only'})
+    Send-MonitorMessage ("[TEST] PC2 MySQL 백업 알림 전송 시험`n전송 시각: "+(Format-MessageTime ([DateTime]::UtcNow.ToString('o')))+"`nDiscord 알림 전송을 확인하는 시험입니다. 실제 백업 실패나 DB 변경은 발생시키지 않았습니다.")
+    Write-MonitorJson $receiptFile ([PSCustomObject]@{DeliveredUtc=[DateTime]::UtcNow.ToString('o'); Kind='test-only'; WorkerSha256=$config.WorkerSha256})
     Write-Host 'PASS: Discord confirmed the TEST message. Verify it in the selected channel.'
     return
 }
 if ($Action -eq 'Install') {
     $receipt=Read-MonitorJson $receiptFile
     $tested=Read-UtcTime $receipt.DeliveredUtc
-    if ($receipt.Kind -ne 'test-only' -or $tested -lt [DateTime]::UtcNow.AddDays(-1) -or $tested -gt [DateTime]::UtcNow.AddMinutes(5)) { throw 'Run TestAlert successfully before installing the monitor.' }
+    if ($receipt.Kind -ne 'test-only' -or $tested -lt [DateTime]::UtcNow.AddDays(-1) -or $tested -gt [DateTime]::UtcNow.AddMinutes(5) -or $null -eq $receipt.PSObject.Properties['WorkerSha256'] -or $receipt.WorkerSha256 -ine $config.WorkerSha256) { throw 'Run TestAlert successfully with the current worker before installing the monitor.' }
     if (Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction SilentlyContinue) { throw 'Monitor task already exists. Run Status; no task was replaced.' }
     $taskAction=New-ScheduledTaskAction -Execute $powershell -Argument (Get-MonitorArguments) -WorkingDirectory $repo
     $trigger=New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(1)) -RepetitionInterval (New-TimeSpan -Minutes 5)
@@ -205,10 +286,10 @@ try {
         $same=(@($incident.Issues) -join ',') -ceq (@($report.Issues) -join ',')
         $send=(-not $incident.Open) -or (-not $same)
         if (-not $send) { $send=([DateTime]::UtcNow-(Read-UtcTime $incident.LastSentUtc)).TotalMinutes -ge $config.ReminderMinutes }
-        $message='[ALERT] PC2 MySQL backup: '+($report.Issues -join ', ')+'. Last successful completion UTC='+$report.LastSuccessUtc+'. Check PC2 backup Status. No automatic DB changes.'
+        $message=Get-NotificationMessage $report
     } elseif ($report.Status -eq 'healthy' -and $incident.Open) {
         $send=$true
-        $message='[RECOVERY] PC2 MySQL backup checks are healthy again. Last successful completion UTC='+$report.LastSuccessUtc+'. This does not certify restore success or zero replication lag.'
+        $message=Get-NotificationMessage $report -Recovery $true
     }
     if ($send) {
         try { Send-MonitorMessage $message }
