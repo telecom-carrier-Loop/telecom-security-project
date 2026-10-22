@@ -82,7 +82,7 @@ URL은 `https://discord.com/api/webhooks/.../...` 형식이다. **채팅·스크
 $loopAlertSource = Join-Path $env:TEMP 'loop-mysql84-backup-discord.ps1'
 $loopAlertUrl = 'https://raw.githubusercontent.com/telecom-carrier-Loop/telecom-security-project/codex/mysql84-discord-monitor-20261022/infrastructure/tools/mysql84-backup-discord.ps1'
 Invoke-WebRequest -UseBasicParsing -Uri $loopAlertUrl -OutFile $loopAlertSource
-if ((Get-FileHash -Algorithm SHA256 -LiteralPath $loopAlertSource).Hash -ine '4E2859B01AAD3DDB54B86C6058A704B65B0751B49EC46528040F498F7DA3E857') { throw '내려받은 감시 도구 해시가 다릅니다. 실행하지 마세요.' }
+if ((Get-FileHash -Algorithm SHA256 -LiteralPath $loopAlertSource).Hash -ine '1172F90BB643A170A05095C5700C4751FE9F3271AA92E619084C22183830482E') { throw '내려받은 감시 도구 해시가 다릅니다. 실행하지 마세요.' }
 Unblock-File -LiteralPath $loopAlertSource
 powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File "$loopAlertSource" -RepositoryPath "$loopRepo" -Action SaveWebhook
 if ($LASTEXITCODE -ne 0) { throw '웹훅 저장 실패. 중단하세요.' }
@@ -100,7 +100,7 @@ powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -Fil
 if ($LASTEXITCODE -ne 0) { throw 'Discord 시험 전송 실패. 예약 등록 전에 연결과 웹훅을 확인하세요.' }
 ```
 
-PowerShell에서 `PASS: Discord confirmed the TEST message`가 나오고 선택한 채널에 `[TEST] PC2 MySQL backup Discord delivery test...`가 도착해야 한다. `wait=true`로 Discord의 저장 응답까지 확인한다. 실제 백업 실패·복원·DB 전환은 일으키지 않는다. 봇을 별도 설치하거나 DB 비밀번호를 제공할 필요는 없다.
+PowerShell에서 `PASS: Discord confirmed the TEST message`가 나오고 선택한 채널에 `[TEST] PC2 MySQL 백업 알림 전송 시험`과 한국 시간 전송 시각이 도착해야 한다. `wait=true`로 Discord의 저장 응답까지 확인한다. 실제 백업 실패·복원·DB 전환은 일으키지 않는다. 봇을 별도 설치하거나 DB 비밀번호를 제공할 필요는 없다.
 
 ## 7. 현재 상태 점검 후 별도 5분 감시 예약 등록
 
@@ -142,6 +142,38 @@ powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -Fil
 
 감시 작업 Ready/result=0, 새 CheckedUtc, healthy 또는 정상 실행 중인 백업의 pending, 기존 백업 예약 Ready 또는 정상 Running을 확인한다. 이후 첫 5분 정기 실행이 지난 다음에는 두 Status만 조회해 CheckedUtc가 다시 새로워지는지 확인한다.
 
+## 웹훅 저장·시험 전송 후, 예약 등록 전 메시지 코드 갱신
+
+이 절차는 웹훅 저장과 시험 전송까지만 실행했고 자동 감시 예약은 아직 등록하지 않은 경우에 사용한다. 위 5단계의 최신 파일 다운로드·SHA256 확인·Unblock-File까지 실행한 뒤, **SaveWebhook을 다시 실행하는 대신** 아래 블록을 실행한다. 기존 웹훅을 다시 입력하지 않는다.
+
+```powershell
+powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "$loopAlertSource" -RepositoryPath "$loopRepo" -Action Update
+if ($LASTEXITCODE -ne 0) { throw '메시지 코드 갱신 실패. 여기서 중단하세요.' }
+$loopAlert = Join-Path $loopBackupRoot 'discord-monitor/mysql84-backup-discord.ps1'
+powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "$loopAlert" -RepositoryPath "$loopRepo" -Action TestAlert
+if ($LASTEXITCODE -ne 0) { throw '새 버전 시험 전송 실패. 예약 등록 전에 확인하세요.' }
+```
+
+Update는 원래 사용자와 기존 설치 해시를 확인하고 감시 코드·해시만 갱신한다. 웹훅, 백업 예약·도구, DB·복제는 유지하며 실패하면 이전 코드·설정으로 되돌린다. Check 실행 중이거나 자동 감시 예약이 이미 존재하면 갱신하지 않는다. 현재 버전의 새 TestAlert 성공을 확인한 뒤 7~8단계의 예약 등록·실행 확인으로 진행한다.
+
+## 한국 시간·실제 경과 시간 메시지
+
+메시지의 시각은 실행 PC의 시간대 설정과 무관하게 KST(UTC+9)로 표시하고, 내부 JSON 기록은 UTC를 유지한다. 다음은 문구 설명용 예시이며 실제 현장 장애 기록이 아니다.
+
+```text
+[ALERT] PC2 MySQL 백업 이상
+확인 시각: 2026-10-23 00:00:13 KST
+- 2026-10-22 22:25:13 KST 마지막 백업 성공 이후 1시간 35분 0초 동안 새 백업이 성공적으로 완료되지 않았습니다. (기준: 90분)
+```
+
+```text
+[ALERT] PC2 MySQL 백업 이상
+확인 시각: 2026-10-22 23:27:14 KST
+- 백업 작업이 2026-10-22 23:14:14 KST에 시작된 뒤 13분 0초 동안 완료되지 않았습니다. (기준: 12분)
+```
+
+12분은 미실행 시간이 아니라 실행 중인 작업의 완료 지연 기준이다. 5분 점검 주기 때문에 실제 문구에는 13분·16분 등 감지 당시 경과 시간이 표시될 수 있다. 실패 알림에는 확인 시각, 마지막 성공 시각, 최근 작업의 시작·종료 시각과 소요 시간을 표시한다. 기록이 손상돼 시각을 알 수 없으면 추측하지 않고 확인 불가로 표시한다. 정상화·시험 메시지도 한국어와 KST 시각을 사용한다.
+
 ## 알림 기준과 한계
 
 | 조건 | 감지/전송 |
@@ -156,7 +188,7 @@ powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -Fil
 | 이상 해소, 실행 중이 아님 | RECOVERY 1회 |
 | Discord 전송 실패 | 로컬 Delivery=failed, 예약 결과 비정상. 전송 완료로 기록하지 않고 다음 점검에서 재시도 |
 
-메시지에는 고정된 상태 코드·UTC 시각만 포함한다. 웹훅, DB 비밀번호, SQL, 개인 데이터, 비공개 로그 본문은 보내지 않으며 `@everyone` 같은 멘션도 비활성화한다. 네트워크 응답이 유실된 경우 재시도 메시지가 중복될 수 있다.
+메시지에는 한국어 상태 설명·KST 시각·실제 경과 시간을 포함한다. 웹훅, DB 비밀번호, SQL, 개인 데이터, 비공개 로그 본문은 보내지 않으며 `@everyone` 같은 멘션도 비활성화한다. 네트워크 응답이 유실된 경우 재시도 메시지가 중복될 수 있다.
 
 이 감시는 **백업 실행 기록 감시**다. 복제 스레드가 방금 중단됐는지를 5분마다 SQL로 확인하지 않는다. 복제 이상은 기존 백업의 preflight가 실행될 때 감지되므로 최대 다음 백업까지 늦어질 수 있다. 복제 지연 0초·최신 데이터 일치·복원 성공도 인증하지 않는다.
 
