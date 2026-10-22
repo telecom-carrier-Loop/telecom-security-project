@@ -3,7 +3,6 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../app/providers/AuthProvider'
 import { ROLE_LABEL } from '../../utils/format'
 import Logo from '../common/Logo'
-import MonitoringLinks from '../common/MonitoringLinks'
 
 const SERVICE_MENU: [string, string][] = [
   ['/admin/customers', '회원 목록'],
