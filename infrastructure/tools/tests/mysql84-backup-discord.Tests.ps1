@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param()
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -78,9 +78,23 @@ try {
     Expect-Failure Install '*'
     Step TestAlert
     Assert-Test ($global:DiscordMock.Messages.Count -eq 1 -and $global:DiscordMock.Messages[0].StartsWith('[TEST]')) 'No test delivery.'
+    Assert-Test ($global:DiscordMock.Messages[0].Contains('전송 시각:') -and $global:DiscordMock.Messages[0].Contains('KST')) 'Test message is not Korean/KST.'
+    $webhookHash=(Get-FileHash -LiteralPath (Join-Path $monitor 'webhook.clixml')).Hash
+    $worker=Join-Path $monitor 'mysql84-backup-discord.ps1'
+    [IO.File]::AppendAllText($worker,"`n# fixture previous version",$utf8)
+    $oldConfig=Read-Monitor 'config.json';$oldConfig.WorkerSha256=(Get-FileHash -LiteralPath $worker).Hash
+    Write-Fixture (Join-Path $monitor 'config.json') $oldConfig
+    $oldReceipt=Read-Monitor 'test-delivery.json';$oldReceipt.WorkerSha256=$oldConfig.WorkerSha256
+    Write-Fixture (Join-Path $monitor 'test-delivery.json') $oldReceipt
+    Step Update
+    Assert-Test ((Get-FileHash -LiteralPath $worker).Hash -eq (Get-FileHash -LiteralPath $tool).Hash -and (Get-FileHash -LiteralPath (Join-Path $monitor 'webhook.clixml')).Hash -eq $webhookHash) 'Update did not preserve the encrypted webhook.'
+    Expect-Failure Install 'Run TestAlert'
+    Step TestAlert
+    $global:DiscordMock.Messages.RemoveAt(1)
     Step Install
     Assert-Test ($global:DiscordMock.RegisterCount -eq 1) 'Monitor was not registered.'
     Expect-Failure Install 'already exists'
+    Expect-Failure Update 'already installed'
     Expect-Failure SaveWebhook 'already configured'
     Step Check
     Assert-Test ($global:DiscordMock.Messages.Count -eq 1) 'Healthy initial check sent a message.'
@@ -88,6 +102,7 @@ try {
     Set-Record failed
     Expect-Failure Check 'Backup health alert'
     Assert-Test ($global:DiscordMock.Messages.Count -eq 2 -and (Read-Monitor 'incident.json').Open) 'Failure not delivered.'
+    Assert-Test ($global:DiscordMock.Messages[1].Contains('최근 백업 작업이 실패했습니다.') -and $global:DiscordMock.Messages[1].Contains('최근 백업 시작:') -and $global:DiscordMock.Messages[1].Contains('최근 백업 종료:') -and $global:DiscordMock.Messages[1].Contains('소요 1분')) 'Failure message lacks Korean attempt timing.'
     Expect-Failure Check 'Backup health alert'
     Assert-Test ($global:DiscordMock.Messages.Count -eq 2) 'Duplicate was not suppressed.'
     Set-Record running
@@ -98,12 +113,17 @@ try {
     Set-Record
     Step Check
     Assert-Test ($global:DiscordMock.Messages.Count -eq 3 -and $global:DiscordMock.Messages[2].StartsWith('[RECOVERY]') -and -not (Read-Monitor 'incident.json').Open) 'Recovery not delivered.'
+    Assert-Test ($global:DiscordMock.Messages[2].Contains('정상 상태로 돌아왔습니다.') -and $global:DiscordMock.Messages[2].Contains('마지막 백업 성공:')) 'Recovery timing missing.'
     Step Check
     Assert-Test ($global:DiscordMock.Messages.Count -eq 3) 'Recovery repeated.'
 
     Set-Record success 95
     Expect-Failure Check 'Backup health alert'
     Assert-Test ((Read-Monitor 'last-check.json').Issues -contains 'no-success-within-90-minutes') 'Stale backup not detected.'
+    $staleMessage=$global:DiscordMock.Messages[$global:DiscordMock.Messages.Count-1]
+    $successTime=(Get-Content -LiteralPath (Join-Path $scheduler 'last-success.json') -Raw|ConvertFrom-Json).CompletedUtc
+    $expectedTime=([DateTimeOffset]::Parse($successTime)).ToOffset([TimeSpan]::FromHours(9)).ToString("yyyy-MM-dd HH:mm:ss 'KST'")
+    Assert-Test ($staleMessage.Contains($expectedTime) -and $staleMessage.Contains('1시간 35분') -and $staleMessage.Contains('동안 새 백업이 성공적으로 완료되지 않았습니다.')) 'Stale message lacks actual elapsed time and Korean timestamp.'
     $record=Read-Monitor 'incident.json';$record.LastSentUtc=[DateTime]::UtcNow.AddMinutes(-61).ToString('o')
     Write-Fixture (Join-Path $monitor 'incident.json') $record
     $before=$global:DiscordMock.Messages.Count
@@ -135,6 +155,8 @@ try {
     Set-Record running 15
     Expect-Failure Check 'Backup health alert'
     Assert-Test ((Read-Monitor 'last-check.json').Issues -contains 'backup-running-over-12-minutes') 'Stuck run ignored.'
+    $runningMessage=$global:DiscordMock.Messages[$global:DiscordMock.Messages.Count-1]
+    Assert-Test ($runningMessage.Contains('에 시작된 뒤 16분') -and $runningMessage.Contains('동안 완료되지 않았습니다. (기준: 12분)')) 'Stuck message confused long-running work with no backup.'
     Set-Record
     [IO.File]::WriteAllText((Join-Path $scheduler 'last-run.json'),'{invalid JSON',$utf8)
     Expect-Failure Check 'Backup health alert'
