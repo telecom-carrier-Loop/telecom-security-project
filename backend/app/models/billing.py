@@ -42,6 +42,8 @@ class Payment(TimestampMixin, db.Model):
     amount: Mapped[int] = mapped_column(Integer, nullable=False)
     method: Mapped[str] = mapped_column(String(20), nullable=False, default="MOCK_CARD")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING")
+    # 카카오페이 테스트 결제: ready 응답의 거래 ID(tid). 승인·취소는 서버가 저장한 이 값으로만 요청한다
+    pg_tid: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
 
     def to_dict(self) -> dict:
         return {"id": self.id, "invoice_id": self.invoice_id, "amount": self.amount,

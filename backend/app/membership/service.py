@@ -17,7 +17,12 @@ from ..models.base import utcnow
 from ..plans.routes import my_active_subscription
 
 WELCOME_POINTS = 1000
-PAYMENT_EARN_RATE = 0.01  # 요금 납부 금액의 1% 적립
+
+
+def payment_points(account: MembershipAccount, amount: int) -> int:
+    """요금 납부 적립 포인트 — 등급별 적립률(earn_rate_bp, 100 = 1%). 소수점 이하는 버린다."""
+    rate = account.tier.earn_rate_bp if account and account.tier else 0
+    return amount * rate // 10000
 
 
 def tier_for_fee(monthly_fee: int):

@@ -197,7 +197,21 @@ def monitoring_links():
         url = _safe_url(os.getenv(env)) or (local_default if local else None)
         if url or key in ("wazuh", "graylog", "grafana"):  # 주요 3종은 미설정이어도 자리를 보여준다
             items.append({"key": key, "name": name, "url": url, "description": desc, "env": env})
-    return ok({"links": items, "grafana_embed_url": _grafana_embed_url()})
+    return ok({"links": items, "grafana_embed_url": _grafana_embed_url(),
+               "grafana_panel_url": _grafana_panel_url()})
+
+
+def _grafana_panel_url():
+    """관리자 대시보드에 띄울 Grafana 패널 하나 (GRAFANA_PANEL_URL, Share → Embed 의 d-solo 주소)."""
+    url = _safe_url(os.getenv("GRAFANA_PANEL_URL"))
+    if not url:
+        return None
+    sep = "&" if "?" in url else "?"
+    for key, value in (("timezone", "Asia%2FSeoul"), ("refresh", "30s")):
+        if f"{key}=" not in url:
+            url += f"{sep}{key}={value}"
+            sep = "&"
+    return url
 
 
 def _grafana_embed_url():

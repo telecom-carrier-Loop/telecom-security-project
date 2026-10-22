@@ -29,6 +29,34 @@ def test_cards():
     return ok({"cards": [{"number": n, "result": labels[n]} for n in gateway.TEST_CARDS]})
 
 
+@bp.get("/payments/methods")
+def payment_methods():
+    from . import kakaopay
+    return ok({"mock_card": True, "kakaopay": kakaopay.enabled()})
+
+
+@bp.post("/payments/kakaopay/ready")
+@login_required
+def kakaopay_ready():
+    payment, redirect, created = service.kakaopay_ready(current_user(), body(), idempotency_key())
+    return ok({"payment": payment_dict(payment), "redirect_url": redirect, "replayed": not created},
+              201 if created else 200)
+
+
+@bp.post("/payments/kakaopay/approve")
+@login_required
+def kakaopay_approve():
+    payment = service.kakaopay_approve(current_user(), body())
+    return ok({"payment": payment_dict(payment, with_events=True)})
+
+
+@bp.post("/payments/kakaopay/abort")
+@login_required
+def kakaopay_abort():
+    payment = service.kakaopay_abort(current_user(), body())
+    return ok({"payment": payment_dict(payment)})
+
+
 @bp.get("/invoices/me")
 @login_required
 def my_invoices():

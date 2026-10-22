@@ -63,6 +63,13 @@ class Config:
     # 나중에 분리할 때는 이 변수에만 다른 값을 넣으면 된다 (코드 수정 없음).
     AUTOMATION_API_TOKEN = os.getenv("AUTOMATION_API_TOKEN") or os.getenv("INCIDENT_API_TOKEN", "")
 
+    # 카카오페이 테스트 결제 (developers.kakaopay.com → 테스트 Secret key). 비우면 카카오페이 버튼이 숨겨진다
+    KAKAOPAY_SECRET_KEY = os.getenv("KAKAOPAY_SECRET_KEY", "").strip()
+    KAKAOPAY_CID = os.getenv("KAKAOPAY_CID", "TC0ONETIME")
+    KAKAOPAY_API_BASE = os.getenv("KAKAOPAY_API_BASE", "https://open-api.kakaopay.com")
+    # 카카오페이 인증 후 돌아올 웹 주소 (프론트엔드). 로컬 개발: Vite
+    PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "http://localhost:5173")
+
     # 보안 대시보드
     IP_BLOCK_DEFAULT_MINUTES = int(os.getenv("IP_BLOCK_DEFAULT_MINUTES", "60"))  # 자동 차단 기본 시간
     # 허용된 관리자 이메일 (쉼표 구분). 비어 있으면 권한 점검·자동 회수를 하지 않는다.
@@ -79,6 +86,7 @@ class TestConfig(Config):
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     SQLALCHEMY_ENGINE_OPTIONS = {}
     INCIDENT_API_TOKEN = "test-incident-token"
+    KAKAOPAY_SECRET_KEY = "DEV-test-secret"
     GRAYLOG_GELF_HOST = ""
     TRUSTED_PROXY_HOPS = 1
     AUTOMATION_API_TOKEN = "test-incident-token"

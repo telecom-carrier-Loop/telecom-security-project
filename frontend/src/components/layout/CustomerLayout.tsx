@@ -1,63 +1,42 @@
-import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../app/providers/AuthProvider'
+import Dropdown from '../common/Dropdown'
 import Logo from '../common/Logo'
 
+// 홈은 로고를 누르면 간다. 프로필·1:1 문의·로그아웃은 이름 메뉴에.
 const NAV = [
   { to: '/usage', label: '내 이용현황' },
   { to: '/plans', label: '요금제' },
   { to: '/billing', label: '요금 납부' },
-  { to: '/membership', label: 'L∞P+ 멤버십' },
+  { to: '/membership', label: 'L∞P+ 멤버십', end: true },
+  { to: '/membership/shop', label: '포인트 상점' },
+  { to: '/notices', label: '공지사항' },
 ]
 
 export default function CustomerLayout() {
   const { user, logout, isAdmin } = useAuth()
   const navigate = useNavigate()
-  const [open, setOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  const onLogout = async () => {
-    setOpen(false)
-    await logout()
-    navigate('/login')
-  }
-
-  useEffect(() => {
-    if (!open) return
-    const onDoc = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
-    document.addEventListener('mousedown', onDoc)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDoc)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
+  const onLogout = async () => { await logout(); navigate('/login') }
 
   return (
     <div className="shell">
       <header className="topnav">
-        <Link to="/" className="topnav__brand brand" aria-label="홈으로"><Logo /></Link>
+        <Link to="/" className="topnav__brand brand" aria-label="L∞P 홈으로"><Logo /></Link>
         <nav className="topnav__menu" aria-label="고객 메뉴">
-          {NAV.map((n) => (
-            <NavLink key={n.to} to={n.to} className="nav__link">{n.label}</NavLink>
-          ))}
-          {isAdmin && <NavLink to="/admin" end className="nav__link">관리자 화면</NavLink>}
+          {NAV.map((n) => <NavLink key={n.to} to={n.to} end={n.end} className="nav__link">{n.label}</NavLink>)}
+          {isAdmin && <NavLink to="/admin" className="nav__link">관리자 화면</NavLink>}
         </nav>
-        <div className="topnav__user" ref={menuRef}>
-          <button type="button" className="topnav__user-btn" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-            {user?.name}님 ▾
-          </button>
-          {open && (
-            <ul className="user-menu">
-              <li><Link to="/settings" onClick={() => setOpen(false)}>프로필 설정</Link></li>
-              <li><Link to="/support" onClick={() => setOpen(false)}>1:1 문의</Link></li>
-              <li><button type="button" onClick={onLogout}>로그아웃</button></li>
-            </ul>
+        <Dropdown label={`${user?.name ?? ''}님`} className="topnav__user">
+          {(close) => (
+            <>
+              <li className="user-menu__meta">{user?.email}</li>
+              <li><Link to="/settings" onClick={close}>프로필 설정</Link></li>
+              <li><Link to="/support" onClick={close}>1:1 문의</Link></li>
+              <li className="user-menu__sep" role="separator" />
+              <li><button type="button" onClick={() => { close(); onLogout() }}>로그아웃</button></li>
+            </>
           )}
-        </div>
+        </Dropdown>
       </header>
       <div className="main">
         <main id="content"><Outlet /></main>

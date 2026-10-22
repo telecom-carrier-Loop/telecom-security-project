@@ -20,7 +20,10 @@ def _account_dict(account):
                  .order_by(MembershipTier.rank).first())
     return {
         "joined": True,
-        "tier": {"code": account.tier.code, "name": account.tier.name, "rank": account.tier.rank},
+        "tier": {"code": account.tier.code, "name": account.tier.name, "rank": account.tier.rank,
+                 "earn_rate_bp": account.tier.earn_rate_bp},
+        "tiers": [{"name": t.name, "rank": t.rank, "earn_rate_bp": t.earn_rate_bp, "min_monthly_fee": t.min_monthly_fee}
+                  for t in MembershipTier.query.order_by(MembershipTier.rank).all()],
         "next_tier": None if not next_tier else {"name": next_tier.name,
                                                   "min_monthly_fee": next_tier.min_monthly_fee},
         "point_balance": account.point_balance,

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useRef, useState } from 'react'
 import ErrorState from '../../components/common/ErrorState'
 import Loading from '../../components/common/Loading'
@@ -75,8 +76,22 @@ export default function MembershipPage() {
         <article className="panel panel--hero">
           <h2>사용 가능한 포인트</h2>
           <p className="meter__headline">{m.point_balance.toLocaleString()}<small>P</small></p>
-          <p className="muted">{m.tier.name} 등급
+          <p className="muted">{m.tier.name} 등급 · 요금 납부 시 <strong>{m.tier.earn_rate_bp / 100}%</strong> 적립
             {m.next_tier && ` · 월 ${won(m.next_tier.min_monthly_fee)} 이상 요금제면 ${m.next_tier.name}`}</p>
+          <p><Link to="/membership/shop">포인트 상점 가기 →</Link></p>
+        </article>
+        <article className="panel">
+          <h2>등급별 적립률</h2>
+          <table className="table">
+            <thead><tr><th>등급</th><th>조건 (월 요금)</th><th className="num">납부 적립</th></tr></thead>
+            <tbody>{m.tiers.map((t) => (
+              <tr key={t.rank} className={t.rank === m.tier.rank ? 'row--current' : ''}>
+                <td>{t.name}{t.rank === m.tier.rank && ' (현재)'}</td>
+                <td>{t.min_monthly_fee ? `${won(t.min_monthly_fee)} 이상` : '누구나'}</td>
+                <td className="num">{t.earn_rate_bp / 100}%</td>
+              </tr>
+            ))}</tbody>
+          </table>
         </article>
         <article className="panel">
           <h2>최근 사용한 혜택</h2>

@@ -93,7 +93,8 @@ export type Membership =
   | { joined: false }
   | {
       joined: true
-      tier: { code: string; name: string; rank: number }
+      tier: { code: string; name: string; rank: number; earn_rate_bp: number }
+      tiers: { name: string; rank: number; earn_rate_bp: number; min_monthly_fee: number }[]
       next_tier: { name: string; min_monthly_fee: number } | null
       point_balance: number
       joined_at: string
@@ -266,3 +267,33 @@ export interface AutomationLog {
   result: 'DONE' | 'ALREADY' | 'SKIPPED' | string
   reason: string | null
 }
+
+export type NoticeCategory = 'GENERAL' | 'MAINTENANCE' | 'EVENT' | 'SECURITY'
+export interface Notice {
+  id: number
+  category: NoticeCategory
+  category_label: string
+  title: string
+  is_pinned: boolean
+  is_published: boolean
+  published_at: string | null
+  updated_at: string
+  view_count: number
+  summary?: string
+  content?: string
+}
+
+export interface ShopItem {
+  id: number
+  name: string
+  description: string | null
+  category: 'GOODS' | 'DATA' | 'COUPON'
+  price_points: number
+  stock: number | null
+  min_tier_rank: number
+  is_active: boolean
+  sold_out: boolean
+  available: boolean | null
+  sold?: number
+}
+export interface ShopOrder { id: number; item: string; points: number; status: string; code: string; created_at: string }

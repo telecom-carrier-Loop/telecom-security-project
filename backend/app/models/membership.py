@@ -13,6 +13,8 @@ class MembershipTier(TimestampMixin, db.Model):
     name: Mapped[str] = mapped_column(String(30), nullable=False)
     min_monthly_fee: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 등급 조건 예시
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    # 등급별 요금 납부 적립률 (basis point: 100 = 1%). BASIC 0.5% · SILVER 1% · GOLD 2% · VIP 3%
+    earn_rate_bp: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
 
 
 class MembershipAccount(TimestampMixin, db.Model):

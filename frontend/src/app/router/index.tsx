@@ -18,6 +18,11 @@ import AdminIpBlocksPage from '../../features/incidents/AdminIpBlocksPage'
 import AdminPrivilegesPage from '../../features/incidents/AdminPrivilegesPage'
 import AdminBenefitsPage from '../../features/membership/AdminBenefitsPage'
 import MembershipPage from '../../features/membership/MembershipPage'
+import ShopPage from '../../features/membership/ShopPage'
+import AdminShopPage from '../../features/membership/AdminShopPage'
+import NoticesPage, { NoticeDetailPage } from '../../features/notices/NoticesPage'
+import AdminNoticesPage from '../../features/notices/AdminNoticesPage'
+import KakaoPayResultPage from '../../features/payments/KakaoPayResultPage'
 import AdminPaymentsPage from '../../features/payments/AdminPaymentsPage'
 import BillingPage from '../../features/payments/BillingPage'
 import PlansPage from '../../features/plans/PlansPage'
@@ -42,6 +47,10 @@ export const router = createBrowserRouter([
         { path: 'plans', element: <PlansPage /> },
         { path: 'billing', element: <BillingPage /> },
         { path: 'membership', element: <MembershipPage /> },
+        { path: 'membership/shop', element: <ShopPage /> },
+        { path: 'notices', element: <NoticesPage /> },
+        { path: 'notices/:id', element: <NoticeDetailPage /> },
+        { path: 'billing/kakaopay/:result', element: <KakaoPayResultPage /> },
         { path: 'support', element: <SupportPage /> },
         { path: 'support/:id', element: <SupportDetailPage /> },
         { path: 'settings', element: <ProfileSettingsPage /> },
@@ -64,6 +73,8 @@ export const router = createBrowserRouter([
         { path: 'customers/:id', element: <AdminCustomerDetailPage /> },
         { path: 'payments', element: <AdminPaymentsPage /> },
         { path: 'benefits', element: <AdminBenefitsPage /> },
+        { path: 'shop', element: <AdminShopPage /> },
+        { path: 'notices', element: <AdminNoticesPage /> },
         { path: 'ip-blocks', element: <AdminIpBlocksPage /> },
         { path: 'privileges', element: <AdminPrivilegesPage /> },
         { path: 'automation', element: <AdminAutomationPage /> },
