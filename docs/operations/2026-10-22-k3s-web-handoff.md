@@ -16,8 +16,8 @@
 | PC2 Ubuntu VM | `pc2-k3s`, `192.168.7.100/24`, `br0` | k3s Agent/Worker, 노드 Ready |
 | k3s | 양쪽 `v1.36.5+k3s1`, 기본 containerd | 노드 목록에서 버전 일치 확인 |
 | VM 사양 | 각 2 vCPU / 약 4 GiB RAM / 가상 디스크 60 GB | 실제 `/` 파일시스템은 약 29 GB였으므로 디스크 전체가 확장됐다고 보지 않음 |
-| PC1 Windows MySQL | `192.168.3.18:3306`, `flask_mysql` | 오늘 두 노드의 Pod TCP 연결, Flask 준비 검사·업무 조회 성공 |
-| PC2 Windows MySQL | 기존 `192.168.3.19:3306`, `mysql-lab` | 10-21 복제·백업 기록 기준. 오늘 복제 스레드·지연 상태를 새로 확인한 화면은 없음 |
+| PC1 Windows MySQL | `192.168.3.18:3306`, `flask_mysql` | 두 노드 Pod TCP·업무 조회 성공. 앱 연결로 8.4.11 / server_id 1 / 두 읽기 전용 값 0 확인 |
+| PC2 Windows MySQL | 기존 `192.168.3.19:3306`, `mysql-lab` | 22:25 KST 예약 시험의 Replica 보호 검사·백업 성공. Windows IP 재조회·직접 복제 상태/지연 출력은 없음 |
 | 앱 DB | `my_new_board_db` | 오늘 사용한 접속 계정은 `root`; 앱 전용 계정 분리 필요 |
 | PC3 pfSense VM | WAN/LAN 주소·어댑터 연결 미확정 | 내일 네트워크 담당자가 설계·설정 |
 
@@ -34,6 +34,8 @@ VM 주소는 마지막 네트워크 화면에서 DHCP 할당이었다. DHCP 예�
 7. 각 노드에 별도 `db-net-pc1`, `db-net-pc2` Pod를 실행해 `192.168.3.18:3306` TCP 연결 성공을 확인했다. 이 TCP 시험 자체는 DB 인증 시험이 아니다.
 8. 기존 환경에서 DB 접속 정보와 이벤트·자동화 토큰을 읽어 ConfigMap·Secret으로 등록했다. 화면에는 값 자체를 출력하지 않았다. Flask 두 Pod가 각각 PC1·PC2에서 `1/1 Running`이며 재시작 0회인 화면을 확인했다.
 9. React/Nginx에서 `/api/`를 Flask Service로 전달하도록 구성한 뒤 새 진입 주소에서 로그인과 회원 목록 조회, 관측된 관리자 API의 200 응답을 확인했다.
+10. Flask Pod의 기존 앱 연결로 PC1 DB 버전 8.4.11, server_id 1, `read_only=0`, `super_read_only=0`, `CURRENT_USER()=root@%`를 확인했다. Windows 컨테이너 내부 `root@localhost` 조회는 두 PC에서 인증 오류 1045가 나서 해당 직접 조회는 미완료다. 비밀번호 변경이나 복제 재구성은 하지 않았다.
+11. PC2 Windows의 저장된 백업 계정으로 예약 상태와 실제 Test 성공을 확인했다. Status의 최근 성공은 22:14:17~22:14:20 KST, 새 Test는 22:25:11~22:25:13 KST였다. 작업 상태 Ready, 결과 0, last-run/last-success success, 다음 예약 23:14:14 KST를 확인했다. Test는 실제 새 백업을 생성했으며 최신 덤프의 RestoreTest를 실행한 것은 아니다.
 
 별도 Agent 정리, 이미지 반입, 설정 등록, 웹 배포는 현장 VM에서 실행됐다. 이 문서 작성에 사용한 로컬 PC가 원격 VM을 직접 조작하거나 MySQL을 변경한 것은 아니다.
 
@@ -138,11 +140,12 @@ ssh -o ExitOnForwardFailure=yes -N -L 127.0.0.1:18080:127.0.0.1:18080 loop@192.1
 | 두 노드 Pod → DB TCP | 확인 완료 |
 | Flask 두 Pod Ready·DB 준비 검사 | 확인 완료 |
 | 새 주소의 로그인·회원 목록·관측된 관리자 API 200 | 확인 완료 |
+| PC1 DB 쓰기 역할, PC2 예약 백업의 Replica 보호 검사·새 백업 | 22:25 KST 후속 확인 완료 |
 | 실제 `telecom-api` Pod 삭제 후 재생성·세션 유지 | 명령 안내까지 진행, 결과 미수신 |
 | 전체 앱 Pod의 최종 목록·재부팅 후 유지 | 추가 확인 필요 |
 | 요청 분산 비율·장애 중 실패 건수·복구 시간 | 미측정 |
 | PC 전체 장애·단일 control plane 장애 | 미검증 |
-| 오늘 새로 수행한 DB 승격·원복·최신 복제 지연 검사 | 없음 |
+| 오늘 새로 수행한 DB 승격·원복·복제 지연 수치 검사·최신 덤프 RestoreTest | 없음 |
 | pfSense·외부 HTTPS·강제 경유·차단 정책·외부 저장장치 | 미구성/미검증 |
 
 PC1이 유일한 control plane이다. PC1 전체 장애에 대한 관리 기능 이중화는 없다. DB Primary도 같은 물리 PC1에 있으므로 PC1 전체 장애 때 Kubernetes 설정을 바꿔 DB를 전환할 수 있다고 가정하면 안 된다. 필수 anti-affinity 때문에 노드 하나가 사라졌을 때 두 번째 같은 앱 Pod가 남은 노드에 무조건 재배치되는 구성도 아니다. MySQL 복제·백업과 Kubernetes의 Pod 복구는 별개의 기능이다.

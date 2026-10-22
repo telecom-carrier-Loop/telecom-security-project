@@ -6,6 +6,14 @@ PC1 flask_mysql(192.168.3.18) → PC2 mysql-lab(192.168.3.19) TLS·GTID 복제�
 
 2026-10-21 현장 결과에서 Test의 즉시 실행은 15:23:38 KST에 성공했다. 이후 첫 시간 트리거 실행도 16:14:15~16:14:17 KST(상태 원문의 07:14:15Z~07:14:17Z)에 새 백업을 만들고 성공했다. 두 번째 화면의 Task state=Ready, Last task result=0x00000000, last-run/last-success=success, 다음 실행 17:14:14 KST를 확인했다. 후속 RestoreTest에서도 당시 최신 백업의 격리 복구와 22개 테이블 CHECK TABLE OK를 확인했고, 시험 컨테이너만 중지되며 라이브 복제본·복제·기존 볼륨은 유지됐다. 따라서 실제 1시간 예약 실행과 백업 복구까지 검증됐다. 사용자 보관 범위는 2026-10-20~2026-11-12이며 별도 저장장치는 없다. 기존 1시간 주기와 자동 삭제 없는 누적 보관을 유지한다.
 
+## 2026-10-22 웹 k3s 이전 후 재검증
+
+PC2 Windows의 Status에서 최근 실행이 22:14:17~22:14:20 KST(원문 13:14:17Z~13:14:20Z)에 성공했음을 확인했다. 이어 저장된 백업 계정을 사용하는 실제 작업 스케줄러 Test가 22:25:11~22:25:13 KST(13:25:11Z~13:25:13Z)에 새 백업을 생성했고 `PASS: real Task Scheduler execution created a new complete backup; task result=0.`을 반환했다. 작업 상태 Ready, 마지막 결과 0, last-run/last-success success, 다음 실행 23:14:14 KST였다.
+
+따라서 웹이 Ubuntu VM의 k3s로 이동한 뒤에도 저장된 백업 계정, Replica 보호 검사와 기존 예약 실행 경로가 동작했다. 기존 MySQL 컨테이너·볼륨·역할을 유지한 이번 웹 이전만으로 복제나 예약 도구를 바꿀 필요는 없다. PC2를 Primary로 승격하는 경우의 별도 영향은 [k3s 이전 영향 점검](mysql84-k3s-impact.md)을 따른다.
+
+이번 새 덤프에 대해 RestoreTest를 다시 실행한 결과는 아니다. 직접 복제 지연 수치나 DB 승격·원복을 검증한 것으로 확대하지 않는다. [당일 작업 기록](../operations/2026-10-22-k3s-web-handoff.md)에 확인 범위와 미검증 항목을 함께 남겼다.
+
 ## 설치와 실행 검증
 
 수정된 mysql84-backup.ps1 및 mysql84-backup-schedule.ps1을 받은 뒤 **PC2의 기존 Windows 사용자**로 실행한다. 예시는 TEMP에 각각 loop-mysql84-backup.ps1, loop-mysql84-backup-schedule.ps1으로 받은 경우다. 기존 자격 증명을 다시 저장하거나 root 비밀번호를 입력하지 않는다.
