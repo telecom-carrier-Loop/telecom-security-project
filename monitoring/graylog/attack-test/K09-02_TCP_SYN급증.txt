@@ -1,0 +1,32 @@
+﻿# Windows PowerShell 5.1/7 실행용 · 안전한 모의 GELF UDP 테스트
+# Graylog 웹: http://localhost:9000  / GELF UDP: 127.0.0.1:12201
+# 실제 공격/변경 없이 Graylog 입력 → Event Definition → n8n → Discord 구간만 검사합니다.
+# Wazuh Manager 자체 규칙 발동 검증이 아닙니다.
+# 대상: ED-K09-02 TCP SYN 급증
+# Graylog Search: rule:packet-traffic-analysis AND tcp_syn_count:[115 TO *]
+# 주의: 이는 실제 PCAP 분석값이 아닌 요약 로그 모의 주입입니다. 실제 PCAP 검증은 K09 pcap_to_graylog.py 사용.
+$GRAYLOG_HOST = '127.0.0.1'
+$GRAYLOG_PORT = 12201
+$udp = New-Object System.Net.Sockets.UdpClient
+try {
+    $log = @{
+        version = '1.1'
+        host = 'graylog-test-suite'
+        short_message = 'ED-K09-02 TCP SYN 급증 simulated validation #1'
+        level = 4
+        _test_source = 'GL-WZ-ADDITIONAL-20261022'
+        _simulation = $true
+        _rule = 'packet-traffic-analysis'
+        _src_ip = '198.51.100.22'
+        _analysis_source = 'synthetic-k09-summary'
+        _tcp_syn_count = 115
+        _packet_count = 180
+        _unique_dst_ports = 3
+    } | ConvertTo-Json -Compress -Depth 8
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($log)
+    [void]$udp.Send($bytes, $bytes.Length, $GRAYLOG_HOST, $GRAYLOG_PORT)
+    Start-Sleep -Milliseconds 150
+} finally {
+    $udp.Close()
+}
+Write-Host '모의 GELF UDP 로그 전송 시도 완료. Graylog Search 및 Alerts에서 수신 확인 필요.' -ForegroundColor Green
