@@ -16,6 +16,8 @@ PC2 Windows의 Status에서 최근 실행이 22:14:17~22:14:20 KST(원문 13:14:
 
 ## 설치와 실행 검증
 
+최신 덤프의 격리 복원 재검증과 별도 Discord 실패 알림은 [복원·Discord 감시 절차](mysql84-restore-discord.md)를 따른다. 감시 예약은 기존 1시간 백업 작업과 분리되며 백업 도구·암호화 계정·복제 설정을 교체하지 않는다.
+
 수정된 mysql84-backup.ps1 및 mysql84-backup-schedule.ps1을 받은 뒤 **PC2의 기존 Windows 사용자**로 실행한다. 예시는 TEMP에 각각 loop-mysql84-backup.ps1, loop-mysql84-backup-schedule.ps1으로 받은 경우다. 기존 자격 증명을 다시 저장하거나 root 비밀번호를 입력하지 않는다.
 
 ```powershell
