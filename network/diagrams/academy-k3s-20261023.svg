@@ -75,19 +75,20 @@
 <text x="1138" y="1045" font-size="25" font-weight="700" fill="#175d35" text-anchor="start">백업·복구 | PC2 Windows</text>
 <text x="1138" y="1082" font-size="24" font-weight="400" fill="#175d35" text-anchor="start">예약 백업 · 격리 복원 시험 / 백업 감시 → Discord</text>
 <rect x="2140" y="340" width="820" height="800" rx="16" fill="#fff9ec" stroke="#d79a32" stroke-width="2" stroke-dasharray="10 7"/>
-<text x="2170" y="385" font-size="32" font-weight="700" fill="#82520b" text-anchor="start">PC3 | pfSense VM — 후속 구성</text>
-<rect x="2170" y="414" width="235" height="34" rx="10" fill="#ffedc6" stroke="#ffedc6" stroke-width="2"/>
-<text x="2287.5" y="438" font-size="19" font-weight="700" fill="#82520b" text-anchor="middle">현재 강제 경유 아님</text>
-<text x="2170" y="505" font-size="28" font-weight="700" fill="#684c22" text-anchor="start">방화벽 · VPN · Suricata</text>
-<text x="2170" y="557" font-size="28" font-weight="700" fill="#684c22" text-anchor="start">WAN / LAN / VPN 주소 미확정</text>
-<text x="2170" y="609" font-size="28" font-weight="700" fill="#684c22" text-anchor="start">가상 NIC·실제 통과 경로 확정 필요</text>
+<text x="2170" y="385" font-size="32" font-weight="700" fill="#82520b" text-anchor="start">PC3 | pfSense VM + Suricata</text>
+<rect x="2170" y="414" width="400" height="34" rx="10" fill="#ffedc6" stroke="#ffedc6" stroke-width="2"/>
+<text x="2370" y="438" font-size="19" font-weight="700" fill="#82520b" text-anchor="middle">HTTP 경유 확인 · IDS 검증 예정</text>
+<text x="2170" y="505" font-size="26" font-weight="700" fill="#684c22" text-anchor="start">WAN 192.168.7.178 / LAN 192.168.50.1</text>
+<text x="2170" y="557" font-size="27" font-weight="700" fill="#684c22" text-anchor="start">HTTP :8080 → PC1 VM :30080 확인</text>
+<text x="2170" y="609" font-size="27" font-weight="700" fill="#684c22" text-anchor="start">HTTPS :8443 → :30443 적용 예정</text>
 <rect x="2170" y="660" width="760" height="185" rx="16" fill="#fffdf7" stroke="#e4c78f" stroke-width="2" stroke-dasharray="10 7"/>
-<text x="2190" y="701" font-size="25" font-weight="400" fill="#684c22" text-anchor="start">외부 관리자 VPN 접속: 후속</text>
-<text x="2190" y="749" font-size="25" font-weight="400" fill="#684c22" text-anchor="start">실제 경유·관측 인터페이스만 검사</text>
-<text x="2190" y="797" font-size="25" font-weight="400" fill="#684c22" text-anchor="start">SPAN 없이 학원망 전체 수집으로 표시하지 않음</text>
-<text x="2170" y="918" font-size="27" font-weight="400" fill="#684c22" text-anchor="start">기존 학원망의 모든 트래픽이</text>
+<text x="2190" y="701" font-size="25" font-weight="700" fill="#684c22" text-anchor="start">Suricata IDS | pfSense 내부 / 검증 예정</text>
+<text x="2190" y="749" font-size="25" font-weight="400" fill="#684c22" text-anchor="start">실제 경유·관측 인터페이스의 트래픽 탐지</text>
+<text x="2190" y="797" font-size="25" font-weight="400" fill="#684c22" text-anchor="start">탐지 로그 → PC1 Graylog (연동 예정)</text>
+<text x="2170" y="918" font-size="27" font-weight="400" fill="#684c22" text-anchor="start">VPN: 후속 · 모든 학원망 통신이</text>
 <text x="2170" y="966" font-size="27" font-weight="400" fill="#684c22" text-anchor="start">pfSense를 자동 통과하는 구조는 아님.</text>
-<text x="2170" y="1014" font-size="27" font-weight="400" fill="#684c22" text-anchor="start">주소·게이트웨이를 임의로 바꾸지 않음.</text>
+<text x="2170" y="1014" font-size="27" font-weight="400" fill="#684c22" text-anchor="start">HTTPS 웹 로그인·쿠키 검증: 후속</text>
+<text x="2170" y="1062" font-size="25" font-weight="400" fill="#684c22" text-anchor="start">IPS 차단 모드·탐지 시험: 미확인</text>
 <path d="M2550 340 V310 H2030 V250 H2010" fill="none" stroke="#bd7d14" stroke-width="4" stroke-linejoin="round" stroke-dasharray="10 7" marker-end="url(#amber)"/>
 <rect x="40" y="1180" width="2060" height="225" rx="16" fill="#eaf5ff" stroke="#80b6df" stroke-width="2"/>
 <text x="65" y="1220" font-size="28" font-weight="700" fill="#114e82" text-anchor="start">하나의 k3s 클러스터 | namespace: telecom | 노드 간 k3s API / Flannel</text>
