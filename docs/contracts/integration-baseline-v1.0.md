@@ -2,6 +2,8 @@
 
 작성일: 2026-10-18 / 목적: A·인프라 담당·C·D의 개발 결과물을 동일 기준으로 통합한다.
 
+> **2026-10-23 네트워크 기준 변경:** 학원망에서 프로젝트 전용 스위치·VLAN 분리 없이 Ubuntu VM 두 대의 k3s 웹/API와 Windows Docker MySQL을 사용한다. 현재 네트워크 정본은 [구성도](../../network/diagrams/academy-k3s-20261023.md), [주소](../../network/address-plan.md), [포트](../../network/port-matrix.md), [통신 경로](traffic-flow.md)다. 이 v1.0의 VLAN별 주소·VIP·NodePort·외부 Nginx·OpenVPN 대역·DB VIP 및 관련 4~6·9~11절의 네트워크 목표는 과거 설계 이력이며 실제 적용값이 아니다. 앱 DB의 현장 이름은 `my_new_board_db`다. 아래 과거 값을 근거로 장비·DB·환경변수를 변경하지 않는다.
+
 이 문서는 사용자의 요청에 따라 결정한 새 개발 기준이다. 팀에 공유한 뒤 공통 기준으로 적용하며, 실제 저장소·장비에 이미 반영됐다는 의미는 아니다. 기존 8개 가이드에서 서로 다른 예시를 제시한 항목은 이 문서의 값으로 통일한다. 이후 변경은 변경 이유·영향 파일·검증 결과를 연결된 Issue/PR에 남긴다.
 
 2026-10-19 실행 환경 추가 확인: 최초 공용 PC 실습은 Windows 11 + Docker Desktop 및 학원망을 사용한다. [두 PC Docker 실행 프로필](../operations/shared-pc-docker.md)에 따라 MySQL 복제부터 검증하며 아래 Ubuntu·VLAN·k3s·VIP 목표가 이미 구현되었다고 해석하지 않는다. 별도 Ubuntu VM을 먼저 설치하지 않으며 실제 웹 VIP·k3s 적용 방식은 후속 결정한다.
