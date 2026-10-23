@@ -4,11 +4,13 @@ React·Flask·MySQL 고객 포털에 네트워크 접근 통제, 보안 관제, 
 
 ## 현재 상태
 
-기본 디렉터리와 개발 계약, 인프라 담당자의 Docker·Compose·MySQL 복제 실습·백업 및 k3s/Nginx/Keepalived 템플릿을 준비했습니다. 웹·API·Migration 초안도 main에 추가되었습니다. 앱 전체의 Docker 연동 및 실제 공용 PC 적용은 별도 검증 단계입니다.
+2026-10-23 기준, 학원망에서 PC1·PC2 Ubuntu VM의 k3s에 React/Nginx·Flask를 배포하고 SSH 포트 전달로 웹 접속을 확인했습니다. MySQL Primary·Replica와 예약 백업은 Windows Docker Desktop에서 실행합니다. 프로젝트 전용 스위치와 VLAN 분리는 사용하지 않습니다. pfSense·VPN·외부 HTTPS·웹 진입점 이중화는 후속 구성입니다.
+
+**현재 네트워크 정본:** [학원망·VM k3s 구성도](network/diagrams/academy-k3s-20261023.md) · [주소](network/address-plan.md) · [포트](network/port-matrix.md) · [분석 근거](docs/architecture/academy-network-20261023.md).
 
 인프라 담당자는 [개발·실습 시작 가이드](docs/operations/infra-start-here.md)와 [검증 기록](docs/operations/infra-verification.md)부터 확인합니다.
 
-공용 PC 두 대는 Windows Docker Desktop과 학원망을 사용합니다. 현재 주소에 맞춘 [두 PC MySQL 복제 실행 가이드](docs/operations/shared-pc-docker.md)를 먼저 진행하며 별도 Ubuntu VM 설치를 전제로 하지 않습니다.
+웹/API는 각 Ubuntu VM의 k3s에서, DB는 Windows Docker Desktop에서 실행합니다. [k3s 현장 기록](docs/operations/2026-10-22-k3s-web-handoff.md)과 [매일 시작·종료](docs/runbooks/k3s-mysql-daily-operations.md)를 확인합니다. [두 PC MySQL 실행 가이드](docs/operations/shared-pc-docker.md)는 DB 구성 이력과 함께 읽습니다.
 
 ## 먼저 읽기
 
@@ -17,7 +19,7 @@ React·Flask·MySQL 고객 포털에 네트워크 접근 통제, 보안 관제, 
 3. [협업 및 커밋 규칙](CONTRIBUTING.md)
 4. [환경변수 명세](docs/contracts/environment-variables.md)와 [.env.example](.env.example)
 
-기존 가이드의 예시와 다르면 통합 확정 기준을 적용합니다. 요약 문서가 정본과 달라지지 않도록 같은 PR에서 갱신합니다.
+네트워크 주소·서비스 진입점은 2026-10-23 네트워크 정본을 우선합니다. 통합 기준 v1.0의 VLAN·VIP 목표를 현재 적용값으로 사용하지 않습니다.
 
 ## 역할과 구조
 
@@ -43,8 +45,8 @@ React·Flask·MySQL 고객 포털에 네트워크 접근 통제, 보안 관제, 
 
 ## 고정 기준
 
-- React NodePort `30080`, API NodePort `30500`, API 내부 `5000`.
-- 웹 VIP `192.168.10.100`은 자동 전환, DB VIP `192.168.30.100`은 수동 전환.
+- 현재 Web/API Service는 ClusterIP `80` / `5000`; 사용자 접속은 Windows SSH → PC1 VM port-forward → Web Pod입니다.
+- NodePort·Ingress·Keepalived·웹/DB VIP는 현재 적용 구성이 아닙니다. PC1은 유일한 k3s control plane이며 DB 자동 승격도 구성하지 않았습니다.
 - 서버 세션은 MySQL 공유, Migration은 배포 전 별도 1회 실행.
 - 고객 문의와 보안 인시던트는 별도 데이터·권한·API.
 - 자동 이벤트 API는 `POST /api/internal/incident-events`.
