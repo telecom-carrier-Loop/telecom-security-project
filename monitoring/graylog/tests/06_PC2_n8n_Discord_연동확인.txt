@@ -1,0 +1,21 @@
+﻿[목적] Graylog 이벤트 → PC2 n8n → Discord 전달 상태 확인
+[실행] PC2 n8n 웹 브라우저 (http://192.168.3.19:5678) 및 PC1 Graylog 웹 UI
+
+PC2 n8n 워크플로:
+ - Graylog-Wazuh-Windows-Discord
+   Webhook path: graylog-wazuh-windows
+ - Graylog-Wazuh-FIM-Discord
+   Webhook path: graylog-wazuh-fim
+
+1) PC2 n8n에서 두 워크플로가 Active 상태인지 확인
+2) PC1 Graylog의 Alerts > Notifications:
+   N-WZ-WINDOWS-to-n8n → http://192.168.3.19:5678/webhook/graylog-wazuh-windows
+   N-WZ-FIM-to-n8n → http://192.168.3.19:5678/webhook/graylog-wazuh-fim
+3) PC1에서 02번 파일을 사용해 Windows 경보를 새로 발생시킴
+4) PC1 Graylog Alerts & Events에서 ED-WZ-WINDOWS-PC1 Event 발생 확인
+5) PC2 n8n 해당 워크플로의 Executions에서 성공 실행 확인
+6) Discord에서 경보 도착 및 내용(PC1·Rule 100290·시간) 확인
+7) Linux 경로도 04~05번 파일로 동일 점검
+
+[결과] 2026-10-23 Windows와 Linux FIM 모두 실제 Discord 도착 확인.
+[주의] 실제 Discord Webhook 비밀 URL을 공유 자료/코드에 붙여 넣지 않음. 같은 PC2 FIM 경보가 Manager 직접 연동과 Graylog 경유로 이중 발송될 수 있음.

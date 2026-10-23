@@ -1,0 +1,17 @@
+﻿[목적] PC2 Manager에서 Ubuntu FIM 실제 발생 여부 확인
+[실행] PC2 Windows PowerShell (PC1이 아님)
+
+# Agent 상태: ID 003 pc2-k3s Active 예상
+ docker exec wazuh-manager /var/ossec/bin/agent_control -l
+
+# FIM 경보: JSON 중 이벤트가 많은 경우 마지막 10건만 확인
+ docker exec wazuh-manager grep -E '"id":"(550|553|554)"' /var/ossec/logs/alerts/alerts.json | Select-Object -Last 10
+
+# 서비스 상태
+ docker exec wazuh-manager /var/ossec/bin/wazuh-control status
+
+# PC1 Graylog Search의 별도 검색어
+# wazuh_agent_name:pc2-k3s AND wazuh_rule_id:(550 OR 553 OR 554)
+
+[예상] file creation 554 / modification 550 / deletion 553
+[주의] PC1과 PC2 모두 wazuh-manager라는 Docker 컨테이너 이름을 사용. 이 파일은 반드시 PC2에서 실행.

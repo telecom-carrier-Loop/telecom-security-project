@@ -1,0 +1,21 @@
+﻿[목적] 아직 확인되지 않은 PC1 loop-web Ubuntu VM의 Agent 설치/상태 조사 (조회만)
+[실행 A] PC1 Windows PowerShell
+
+# PC1 Manager에 Agent가 추가돼 있는지 확인
+ docker exec wazuh-manager /var/ossec/bin/agent_control -l
+
+# VM 위치(로컬 파일 존재 여부만 확인)
+ Test-Path "$HOME\Documents\Virtual Machines\loop-web\loop-web.vmx"
+
+[실행 B] PC1 loop-web Ubuntu VM Bash (VM 로그인 후에만)
+
+# OS / 주소 / Wazuh Agent 서비스 유무 확인
+ cat /etc/os-release
+ hostname -I
+ systemctl status wazuh-agent --no-pager
+
+# 설치됐을 경우 연결 대상 확인 (비밀키 출력 금지)
+ sudo grep -A 5 '<client>' /var/ossec/etc/ossec.conf
+
+[예상] 기존 Agent가 없다면 not found 가능. 현재 이 VM의 Agent 정상 연결은 확인되지 않았음.
+[주의] 이 파일에서는 Agent 설치/등록이나 네트워크 설정 변경을 하지 않음.

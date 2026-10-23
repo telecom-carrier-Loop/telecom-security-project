@@ -1,0 +1,21 @@
+﻿[목적] PC1 Windows 테스트 규칙 ID/내용/문법 확인 (조회만)
+[실행] PC1 Windows PowerShell
+
+# 현재 적용된 테스트 규칙 확인
+ docker exec wazuh-manager cat /var/ossec/etc/rules/pc1_windows_test_rules.xml
+
+# 규칙 100290 등록 위치 확인
+ docker exec wazuh-manager grep -R -n 100290 /var/ossec/etc/rules
+
+# 문법 검사 (일반적으로 통과 시 출력 없음)
+ docker exec wazuh-manager /var/ossec/bin/wazuh-analysisd -t
+
+# Windows Application 기본 룰 60003 확인
+ docker exec wazuh-manager grep -A 5 -B 2 60003 /var/ossec/ruleset/rules/0575-win-base_rules.xml
+
+# 시스템 경보·Agent 확인
+ docker exec wazuh-manager /var/ossec/bin/wazuh-control status
+ docker exec wazuh-manager /var/ossec/bin/agent_control -l
+
+[예상] 100290 level 8 규칙 존재, syntax error 없음, board-host Active
+[주의] logtest JSON은 모의 디코딩이며 실제 Agent EventChannel 수집 검증을 대체하지 못함. 불필요한 Manager 재시작 금지.

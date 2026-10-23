@@ -1,0 +1,21 @@
+﻿[목적] PC1 Windows Event 777 -> Wazuh Rule 100290 (Level 8) 실제 경보 확인
+[실행] PC1 Windows '관리자' PowerShell
+[영향] 로컬 Application 이벤트 로그에 실습 경고 1건 기록. 악성 행위·공격 아님.
+
+# 1) 먼저 Agent Active 확인
+ docker exec wazuh-manager /var/ossec/bin/agent_control -l
+
+# 2) 테스트 이벤트 생성 (실제 변경: Application 이벤트 1건 추가)
+ eventcreate /T WARNING /ID 777 /L APPLICATION /SO WazuhLabTest /D "WAZUH-PC1-WINDOWS-TEST-CHECK"
+
+# 3) Windows 이벤트 자체가 생성됐는지 확인
+ Get-WinEvent -FilterHashtable @{LogName='Application'; Id=777; StartTime=(Get-Date).AddMinutes(-30)} -MaxEvents 10 | Where-Object {$_.ProviderName -eq 'WazuhLabTest'} | Select-Object TimeCreated,ProviderName,Id,Message
+
+# 4) Manager 경보 파일에서 Rule ID 확인 (대량 JSON 대신 필드만 표시)
+ docker exec wazuh-manager grep -F '100290' /var/ossec/logs/alerts/alerts.json | Select-Object -Last 3
+
+# 5) PC1 Graylog Search에서 직접 확인할 쿼리
+# wazuh_agent_name:board-host AND wazuh_rule_id:100290
+
+[예상] Windows 생성 성공 -> Wazuh Level 8 경보 -> Graylog 메시지 -> Event -> n8n -> Discord
+[주의] 테스트 규칙 100290이 활성화되어 있어야 하며, 전송에는 짧은 지연이 있을 수 있음.

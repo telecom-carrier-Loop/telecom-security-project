@@ -1,0 +1,23 @@
+﻿[목적] Wazuh Manager → PC1 Graylog Syslog JSON/UDP 5140 연결 현황 조회
+[실행 A] PC1 Windows PowerShell
+
+# PC1 Manager syslog 전달 설정 확인
+ docker exec wazuh-manager grep -A 6 '<syslog_output>' /var/ossec/etc/ossec.conf
+
+# PC1 Manager Graylog 주소 확인
+ docker exec wazuh-manager getent hosts gl-graylog
+
+# 최근 전송 시작 로그/오류 확인
+ docker exec wazuh-manager grep -F 'Forwarding alerts via syslog' /var/ossec/logs/ossec.log | Select-Object -Last 5
+ docker exec wazuh-manager grep -F 'Error sending message' /var/ossec/logs/ossec.log | Select-Object -Last 5
+
+# PC1 Graylog 컨테이너 검색 (이름이 접두어를 포함할 수 있음)
+ docker ps --format 'table {{.Names}}	{{.Ports}}' | Select-String -Pattern 'graylog|5140'
+
+[실행 B] PC2 Windows PowerShell (별도 PC에서)
+# PC2 Manager의 syslog_output server = 192.168.3.18, port 5140 확인
+ docker exec wazuh-manager grep -A 6 '<syslog_output>' /var/ossec/etc/ossec.conf
+
+[웹 UI] PC1 Graylog > System > Inputs > 'Wazuh Alerts (JSON over UDP 5140)' Running 확인
+[예상] PC1 Manager는 gl-graylog:5140, PC2 Manager는 192.168.3.18:5140
+[주의] pfSense 1514/UDP·GELF 12201/UDP는 변경하지 않음.

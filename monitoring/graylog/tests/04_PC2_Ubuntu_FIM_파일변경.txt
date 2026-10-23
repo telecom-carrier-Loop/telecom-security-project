@@ -1,0 +1,22 @@
+﻿[목적] PC2 Ubuntu VM의 허용된 테스트 파일 생성·수정·삭제를 통해 FIM 테스트
+[실행] PC2 Ubuntu VM (pc2-k3s / 192.168.7.100) Bash
+[영향] /etc/ssh 아래 wazuh-fim-check-*.txt 임시파일을 생성·수정·삭제. SSH 설정 파일은 수정하지 않음.
+[전제] PC2 Agent에 /etc/ssh FIM 감시가 설정되어 있고 연결이 Active
+
+# 고유 테스트 파일 경로를 변수에 저장
+TESTFILE="/etc/ssh/wazuh-fim-check-$(date +%Y%m%d%H%M%S).txt"
+echo "TESTFILE=$TESTFILE"
+
+# 1) 생성 -> Wazuh rule 554 기대
+printf 'Wazuh FIM create test
+' | sudo tee "$TESTFILE" >/dev/null
+
+# 2) 수정 -> Wazuh rule 550 기대
+printf 'Wazuh FIM modify test
+' | sudo tee -a "$TESTFILE" >/dev/null
+
+# 3) 삭제 -> Wazuh rule 553 기대
+sudo rm -- "$TESTFILE"
+
+[예상] PC2 Wazuh Manager에서 554 / 550 / 553 탐지, PC1 Graylog 이벤트, Discord 알림
+[주의] FIM 동작 시점·설정에 따라 3개가 모두 기록되는지는 검증 필요. 감시 대상 폴더 외 실행 금지.

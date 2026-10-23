@@ -1,0 +1,15 @@
+﻿[목적] PC1 Graylog에서 경보 검색·이벤트 생성·알림 조건 확인
+[실행] PC1 Graylog 웹 브라우저 (예: http://192.168.3.18:9000)
+
+1) Search → 시간 범위를 최근 15분으로 (결과 없으면 All Time 비교)
+2) 검색 쿼리 (Windows)
+   wazuh_agent_name:board-host AND wazuh_rule_id:100290
+3) 검색 쿼리 (PC2 Ubuntu FIM)
+   wazuh_agent_name:pc2-k3s AND wazuh_rule_id:(550 OR 553 OR 554)
+4) 수신 필드: source, wazuh_agent_name, wazuh_rule_id, wazuh_rule_level, wazuh_rule_description 확인
+5) Alerts → Alerts & Events → Events → ED-WZ-WINDOWS-PC1 또는 ED-WZ-FIM-PC2 발생 확인
+6) Alerts → Event Definitions에서 해당 정의 활성·검색 범위·시간창 확인
+7) Alerts → Notifications에서 N-WZ-WINDOWS-to-n8n / N-WZ-FIM-to-n8n 설정 확인
+
+[예상] Windows 테스트 수신·Event 생성, Linux FIM도 동일한 방식으로 검색 가능
+[주의] 메시지 수신과 Event 생성은 별개. 처음 검색 결과가 없으면 시간 범위부터 확인. 기존 Stream/Content Pack 수정하지 않음.

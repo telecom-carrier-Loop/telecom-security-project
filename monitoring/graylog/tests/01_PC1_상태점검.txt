@@ -1,0 +1,17 @@
+﻿[목적] PC1 Docker·Wazuh Manager·Windows Agent가 정상인지 확인 (조회만)
+[실행] PC1 Windows PowerShell
+
+# 컨테이너 상태
+ docker ps --format "table {{.Names}}	{{.Status}}	{{.Ports}}"
+
+# Wazuh 필수 서비스: db, analysisd, remoted, csyslogd, apid -> is running 기대
+ docker exec wazuh-manager /var/ossec/bin/wazuh-control status
+
+# Windows Agent: board-host (001) -> Active 기대
+ docker exec wazuh-manager /var/ossec/bin/agent_control -l
+
+# PC1 WazuhSvc 서비스
+ Get-Service WazuhSvc
+
+[판단] Docker Running만으로 Manager 정상 보장 안 됨. DB 등 중지 시 테스트 중단 후 원인 점검.
+[주의] 위 명령은 수정/재시작하지 않습니다.
