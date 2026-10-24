@@ -2,7 +2,7 @@
 :root {
   --ink: #15202b;
   --ink-soft: #4a5868;
-  --paper: #f3f5f8;
+  --paper: #f2f4fb;
   --surface: #ffffff;
   --line: #d8dee6;
   --signal: #2236c9;  /* 루프 블루 */
@@ -10,7 +10,11 @@
   --ok: #10916b;
   --warn: #b86e00;
   --danger: #c0392b;
-  --radius: 10px;
+  --radius: 12px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.06);
+  /* 고객 홈 배너 */
+  --hero-bg: #2236c9; --hero-ink: #ffffff; --hero-soft: #c9d1ff;
+  --ring-track: #e4e8f7;
   --font: 'IBM Plex Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
   /* 상태 배지·안내 (배경 / 테두리 / 글자) */
   --ok-bg: #e7f6f0; --ok-line: #b5e2cf; --ok-ink: #0b6b4f;
@@ -43,6 +47,9 @@
   --info-bg: #1b2250; --info-line: #3a4590; --info-ink: #aeb9ff;
   --bar: #0a0f15; --bar-ink: #c6cfda; --bar-strong: #ffffff; --bar-mark: #8fa0ff;
   --chip-on-bg: #7b8cff; --chip-on-ink: #0e141b;
+  --shadow: none;
+  --hero-bg: #1a2350; --hero-ink: #ffffff; --hero-soft: #aeb9ff;
+  --ring-track: #2a3644;
   color-scheme: dark;
 }
 
@@ -423,3 +430,47 @@ a.tool-card:hover { border-color: var(--signal); }
 .user-menu__theme button[aria-pressed='true'] { background: var(--info-bg); border-color: var(--signal); color: var(--info-ink); font-weight: 600; }
 .topnav__user .user-menu { min-width: 230px; }
 .user-menu__theme button { white-space: nowrap; }
+
+/* ---------- 공통 카드: 연한 그림자 (다크에서는 테두리만) ---------- */
+.panel, .tile, .tool-card, .shop-card { box-shadow: var(--shadow); }
+
+/* ---------- 심각도: 색 + 모양 + 글자 ---------- */
+.sev { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.55rem;
+  border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.sev svg { flex-shrink: 0; }
+.sev--critical, .sev--high { background: var(--danger-bg); border-color: var(--danger-line); color: var(--danger-ink); }
+.sev--medium { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn-ink); }
+.sev--low, .sev--info { background: var(--paper); border-color: var(--line); color: var(--ink-soft); }
+
+/* ---------- 고객 홈: 브랜드 볼드 ---------- */
+.hero { background: var(--hero-bg); color: var(--hero-ink); border-radius: 20px; padding: 1.75rem 1.75rem 4.5rem; }
+.hero__greet { font-size: 1.45rem; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+.hero__sub { color: var(--hero-soft); margin: 0.35rem 0 0; font-size: 0.9rem; }
+.hero-card { background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); border: 1px solid var(--line);
+  margin: -3.25rem 1.25rem 1.25rem; padding: 1.25rem; display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
+.hero-card .ring { flex-shrink: 0; }
+.hero-card__minis { flex: 1; min-width: 260px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+.mini { background: var(--paper); border-radius: 14px; padding: 0.85rem 1rem; color: var(--ink); text-decoration: none; display: flex; flex-direction: column; gap: 0.15rem; }
+.mini:hover { outline: 2px solid color-mix(in srgb, var(--signal) 35%, transparent); }
+.mini__label { font-size: 0.8rem; color: var(--ink-soft); }
+.mini__value { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.mini__sub { font-size: 0.78rem; color: var(--ink-soft); }
+.mini__sub--alert { color: var(--danger); font-weight: 600; }
+.shortcuts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.6rem; margin: 0 0 1.25rem; }
+.shortcuts a { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; padding: 0.85rem 0.5rem; border-radius: 16px;
+  background: var(--surface); border: 1px solid var(--line); color: var(--ink); text-decoration: none; font-size: 0.85rem; font-weight: 500; box-shadow: var(--shadow); }
+.shortcuts a svg { color: var(--signal); }
+.shortcuts a:hover { border-color: var(--signal); }
+.shortcuts a.shortcuts__kakao { background: #FEE500; border-color: #FEE500; color: #191919; }
+.shortcuts a.shortcuts__kakao svg { color: #191919; }
+.picks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; margin: 0 0 1.25rem; }
+.pick { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 0.9rem 1rem; color: var(--ink);
+  text-decoration: none; display: flex; flex-direction: column; gap: 0.2rem; box-shadow: var(--shadow); }
+.pick:hover { border-color: var(--signal); }
+.pick__label { font-size: 0.75rem; color: var(--ink-soft); }
+.pick__title { font-weight: 600; font-size: 0.95rem; }
+@media (max-width: 760px) {
+  .shortcuts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .picks { grid-template-columns: 1fr; }
+  .hero-card { margin: -3.25rem 0.75rem 1rem; }
+}
