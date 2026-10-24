@@ -7,6 +7,16 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet" />
     <title>L∞P 루프 고객센터</title>
+    <script>
+      // 화면을 그리기 전에 테마를 정해 흰 화면 깜빡임을 막는다 (utils/theme.ts 와 같은 규칙)
+      (function () {
+        var pref = 'system';
+        try { var v = localStorage.getItem('loop-theme'); if (v === 'light' || v === 'dark') pref = v; } catch (e) {}
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        document.documentElement.dataset.themePref = pref;
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   </head>
   <body>

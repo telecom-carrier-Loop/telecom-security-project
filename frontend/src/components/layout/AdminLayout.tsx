@@ -5,6 +5,7 @@ import { ROLE_LABEL } from '../../utils/format'
 import { useApi } from '../../utils/useApi'
 import Dropdown from '../common/Dropdown'
 import Logo from '../common/Logo'
+import { ThemeMenuItem, ThemeToggle } from '../common/ThemeControls'
 
 // 상단 메뉴: 대시보드는 로고, 서비스 메뉴는 펼쳐 두고 보안·관제 도구는 드롭다운으로 묶는다.
 const SERVICE_MENU: [string, string][] = [
@@ -52,17 +53,22 @@ export default function AdminLayout() {
             ))}
           </Dropdown>
         </nav>
-        <Dropdown label={`${user?.name ?? ''}님`} className="topnav__user">
-          {(close) => (
-            <>
-              <li className="user-menu__meta">{user ? ROLE_LABEL[user.role] : ''} · {user?.email}</li>
-              <li><Link to="/admin/settings" onClick={close}>프로필 설정</Link></li>
-              <li><Link to="/" onClick={close}>고객 화면으로</Link></li>
-              <li className="user-menu__sep" role="separator" />
-              <li><button type="button" onClick={() => { close(); onLogout() }}>로그아웃</button></li>
-            </>
-          )}
-        </Dropdown>
+        <div className="topnav__actions">
+          <ThemeToggle />
+          <Dropdown label={`${user?.name ?? ''}님`} className="topnav__user">
+            {(close) => (
+              <>
+                <li className="user-menu__meta">{user ? ROLE_LABEL[user.role] : ''} · {user?.email}</li>
+                <ThemeMenuItem />
+                <li className="user-menu__sep" role="separator" />
+                <li><Link to="/admin/settings" onClick={close}>프로필 설정</Link></li>
+                <li><Link to="/" onClick={close}>고객 화면으로</Link></li>
+                <li className="user-menu__sep" role="separator" />
+                <li><button type="button" onClick={() => { close(); onLogout() }}>로그아웃</button></li>
+              </>
+            )}
+          </Dropdown>
+        </div>
       </header>
       <div className="main"><main id="content"><Outlet /></main></div>
     </div>

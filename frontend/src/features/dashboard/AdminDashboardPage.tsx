@@ -5,6 +5,7 @@ import Loading from '../../components/common/Loading'
 import { STATUS_LABEL, dateTime, won } from '../../utils/format'
 import type { AdminDashboard, Severity, MonitoringLink } from '../../services/types'
 import { useApi } from '../../utils/useApi'
+import { useTheme, withGrafanaTheme } from '../../utils/theme'
 import MonitoringLinks from '../../components/common/MonitoringLinks'
 
 const SEVERITIES: [Severity, string][] = [
@@ -16,11 +17,12 @@ export default function AdminDashboardPage() {
   const { user } = useAuth()
   const { loading, error, data, reload } = useApi<AdminDashboard>('/admin/dashboard')
   const mon = useApi<{ links: MonitoringLink[]; grafana_embed_url: string | null; grafana_panel_url: string | null }>('/admin/monitoring-links')
+  const { theme } = useTheme()   // 훅은 조기 return 앞에서 호출
   if (loading) return <Loading />
   if (error || !data) return <ErrorState error={error} onRetry={reload} />
   const { customers, support, billing, incidents, protection } = data
   // 대시보드에는 그래프 하나(GRAFANA_PANEL_URL)만, 전체는 관제 지표 화면에서
-  const embedUrl = mon.data?.grafana_panel_url ?? null
+  const embedUrl = mon.data?.grafana_panel_url ? withGrafanaTheme(mon.data.grafana_panel_url, theme) : null
 
   return (
     <section className="page">

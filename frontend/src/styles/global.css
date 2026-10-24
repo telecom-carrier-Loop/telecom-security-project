@@ -12,7 +12,38 @@
   --danger: #c0392b;
   --radius: 10px;
   --font: 'IBM Plex Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+  /* 상태 배지·안내 (배경 / 테두리 / 글자) */
+  --ok-bg: #e7f6f0; --ok-line: #b5e2cf; --ok-ink: #0b6b4f;
+  --warn-bg: #fff4e5; --warn-line: #f1c48a; --warn-ink: #7a4300;
+  --danger-bg: #fdecea; --danger-line: #f2b8b1; --danger-ink: #9b2c20;
+  --info-bg: #eaefff; --info-line: #c3cdf7; --info-ink: #2236c9;
+  /* 관리자 상단 바 */
+  --bar: #15202b; --bar-ink: #e6ebf1; --bar-strong: #ffffff; --bar-mark: #8fa0ff;
+  --bar-hover: rgba(255, 255, 255, 0.08); --bar-active: rgba(255, 255, 255, 0.12); --bar-line: rgba(255, 255, 255, 0.25);
+  /* 선택된 칩 */
+  --chip-on-bg: #15202b; --chip-on-ink: #ffffff;
   color-scheme: light;
+}
+
+/* 다크 모드: <html data-theme="dark"> (utils/theme.ts 와 index.html 의 초기 스크립트가 정한다) */
+:root[data-theme='dark'] {
+  --ink: #e6ebf1;
+  --ink-soft: #9aa8b8;
+  --paper: #0e141b;
+  --surface: #161e28;
+  --line: #2a3644;
+  --signal: #7b8cff;
+  --signal-ink: #0e141b;
+  --ok: #3fbf8f;
+  --warn: #e8a33d;
+  --danger: #f0766a;
+  --ok-bg: #0f2a22; --ok-line: #1e5a45; --ok-ink: #7fd9b4;
+  --warn-bg: #2e2210; --warn-line: #6b4a16; --warn-ink: #f2c27a;
+  --danger-bg: #33181a; --danger-line: #6e2e2c; --danger-ink: #f4a29a;
+  --info-bg: #1b2250; --info-line: #3a4590; --info-ink: #aeb9ff;
+  --bar: #0a0f15; --bar-ink: #c6cfda; --bar-strong: #ffffff; --bar-mark: #8fa0ff;
+  --chip-on-bg: #7b8cff; --chip-on-ink: #0e141b;
+  color-scheme: dark;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -53,8 +84,8 @@ a { color: var(--signal); }
 .logo__mark { width: 1.2em; height: 0.52em; margin: 0 0.06em; color: var(--signal); }
 .logo__plus { color: var(--signal); margin-left: 0.05em; font-size: 0.9em; }
 .logo__suffix { font-size: 0.6em; font-weight: 500; color: var(--ink-soft); margin-left: 0.5em; }
-.shell--admin .logo, .shell--admin .logo__suffix { color: #fff; }
-.shell--admin .logo__mark { color: #8fa0ff; }
+.shell--admin .logo, .shell--admin .logo__suffix { color: var(--bar-strong); }
+.shell--admin .logo__mark { color: var(--bar-mark); }
 .panel h2 { display: inline-flex; align-items: center; gap: 0.35rem; }
 .auth__tagline { margin: -0.5rem 0 0; color: var(--ink-soft); font-size: 0.9rem; }
 .nav__link { padding: 0.55rem 0.75rem; border-radius: 8px; color: inherit; text-decoration: none; }
@@ -66,12 +97,12 @@ a { color: var(--signal); }
 main { flex: 1; padding: 2rem; max-width: 1100px; width: 100%; margin-inline: auto; }
 .footer { padding: 1rem 2rem; font-size: 0.8rem; color: var(--ink-soft); text-align: center; }
 
-.shell--admin .nav__link:hover { background: rgba(255,255,255,0.08); }
-.shell--admin .nav__link.active { background: rgba(255,255,255,0.12); color: #fff; }
-.shell--admin .topnav { background: var(--ink); color: #e6ebf1; border-bottom: none; }
-.shell--admin .topnav__menu .nav__link:hover { background: rgba(255, 255, 255, 0.08); }
-.shell--admin .topnav__menu .nav__link.active { background: rgba(255, 255, 255, 0.12); color: #fff; }
-.shell--admin .topnav__user-btn { border-color: rgba(255, 255, 255, 0.25); color: #e6ebf1; }
+.shell--admin .nav__link:hover { background: var(--bar-hover); }
+.shell--admin .nav__link.active { background: var(--bar-active); color: var(--bar-strong); }
+.shell--admin .topnav { background: var(--bar); color: var(--bar-ink); border-bottom: none; }
+.shell--admin .topnav__menu .nav__link:hover { background: var(--bar-hover); }
+.shell--admin .topnav__menu .nav__link.active { background: var(--bar-active); color: var(--bar-strong); }
+.shell--admin .topnav__user-btn { border-color: var(--bar-line); color: var(--bar-ink); }
 
 /* 페이지 */
 .page__title { font-size: 1.5rem; margin-bottom: 1.25rem; }
@@ -136,7 +167,7 @@ input[aria-invalid='true'] { border-color: var(--danger); }
 /* ---------- 대시보드·설정 추가 ---------- */
 a.brand { text-decoration: none; }
 .nav__group { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
-.shell--admin .nav__group { border-top-color: rgba(255,255,255,0.15); }
+.shell--admin .nav__group { border-top-color: var(--bar-line); }
 .nav__button { font: inherit; text-align: left; background: none; border: none; cursor: pointer; }
 .topbar__user { color: var(--ink); text-decoration: none; font-weight: 500; }
 .topbar__user:hover { color: var(--signal); }
@@ -161,7 +192,7 @@ a.tile:hover { border-color: var(--signal); }
 .quick a:hover { border-color: var(--signal); color: var(--signal); }
 
 .notice { padding: 0.75rem 1rem; border-radius: var(--radius); margin-bottom: 1rem; font-size: 0.9rem; }
-.notice--warn { background: #fff4e5; border: 1px solid #f1c48a; color: #7a4300; }
+.notice--warn { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-ink); }
 .security-line { margin-top: 0.5rem; }
 
 /* 정보 목록 (라벨: 값) */
@@ -175,7 +206,7 @@ a.tile:hover { border-color: var(--signal); }
 .form label { width: 100%; }
 .page--narrow .panel + .panel { margin-top: 1rem; }
 .form-ok { color: var(--ok); font-size: 0.85rem; margin: 0; }
-.panel--danger { border-color: #efc2bc; }
+.panel--danger { border-color: var(--danger-line); }
 .btn--danger { background: var(--danger); border-color: var(--danger); }
 
 /* 인시던트 심각도 */
@@ -208,11 +239,11 @@ textarea { resize: vertical; }
 .filters select { width: auto; }
 
 /* 상태 배지 색 */
-.tag--ok { background: #e7f6f0; border-color: #b5e2cf; color: #0b6b4f; }
-.tag--warn { background: #fff4e5; border-color: #f1c48a; color: #7a4300; }
-.tag--danger { background: #fdecea; border-color: #f2b8b1; color: #9b2c20; }
-.tag--info { background: #eaefff; border-color: #c3cdf7; color: var(--signal); }
-.notice--ok { background: #e7f6f0; border: 1px solid #b5e2cf; color: #0b6b4f; }
+.tag--ok { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok-ink); }
+.tag--warn { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn-ink); }
+.tag--danger { background: var(--danger-bg); border-color: var(--danger-line); color: var(--danger-ink); }
+.tag--info { background: var(--info-bg); border-color: var(--info-line); color: var(--info-ink); }
+.notice--ok { background: var(--ok-bg); border: 1px solid var(--ok-line); color: var(--ok-ink); }
 
 /* 목록 행 */
 .rows { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
@@ -224,7 +255,7 @@ textarea { resize: vertical; }
 /* 필터 칩 */
 .filters { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; align-items: center; }
 .chip { font: inherit; font-size: 0.875rem; padding: 0.35rem 0.85rem; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; color: var(--ink); }
-.chip--on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.chip--on { background: var(--chip-on-bg); color: var(--chip-on-ink); border-color: var(--chip-on-bg); }
 
 /* 문의 대화 */
 .thread { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1rem; }
@@ -315,7 +346,7 @@ a.tool-card:hover { border-color: var(--signal); }
 .inline-form { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
 .inline-form input, .inline-form select { width: auto; }
 .inline-form .grow { flex: 1; min-width: 240px; }
-.notice--danger { background: #fdecea; border: 1px solid #f2b8b1; color: #9b2c20; }
+.notice--danger { background: var(--danger-bg); border: 1px solid var(--danger-line); color: var(--danger-ink); }
 .flow-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
 .flow-card .panel__head h2 { font-size: 0.95rem; }
 .flow-card__path { font-size: 0.75rem; color: var(--ink-soft); margin: 0; word-break: break-all; }
@@ -350,10 +381,10 @@ a.tool-card:hover { border-color: var(--signal); }
 .user-menu__meta { display: block; padding: 0.55rem 1rem 0.45rem; font-size: 0.78rem; color: var(--ink-soft); }
 .user-menu__sep { height: 1px; background: var(--line); margin: 0.3rem 0; }
 /* 관리자 상단(어두운 배경): 버튼 글자만 밝게, 펼친 메뉴는 흰 배경 + 진한 글자 */
-.shell--admin .dropdown__btn { color: #e6ebf1; border-color: rgba(255, 255, 255, 0.25); }
+.shell--admin .dropdown__btn { color: var(--bar-ink); border-color: var(--bar-line); }
 .shell--admin .nav__drop .dropdown__btn { border-color: transparent; }
-.shell--admin .nav__drop .dropdown__btn:hover { background: rgba(255, 255, 255, 0.08); }
-.shell--admin .nav__drop--active .dropdown__btn { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.shell--admin .nav__drop .dropdown__btn:hover { background: var(--bar-hover); }
+.shell--admin .nav__drop--active .dropdown__btn { background: var(--bar-active); color: var(--bar-strong); }
 .shell--admin .user-menu { color: var(--ink); }
 .shell--admin .user-menu a, .shell--admin .user-menu button { color: var(--ink); }
 .shell--admin .user-menu__meta { color: var(--ink-soft); }
@@ -378,3 +409,17 @@ a.tool-card:hover { border-color: var(--signal); }
 .btn--kakao { background: #FEE500; color: #191919; border-color: #FEE500; }
 .btn--kakao:hover { background: #F4DC00; }
 .shell--admin .topnav__user .user-menu { min-width: 230px; }
+
+/* ---------- 화면 테마 선택 ---------- */
+.theme-toggle { font: inherit; background: none; border: 1px solid var(--line); border-radius: 8px; width: 38px; height: 38px;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: inherit; flex-shrink: 0; }
+.theme-toggle:hover { border-color: var(--signal); }
+.shell--admin .theme-toggle { border-color: var(--bar-line); color: var(--bar-ink); }
+.topnav__actions { display: flex; align-items: center; gap: 0.5rem; margin-left: auto; flex-shrink: 0; }
+.topnav__actions .topnav__user { margin-left: 0; }
+.user-menu__theme { display: flex; gap: 0.25rem; padding: 0.3rem 0.75rem 0.5rem; }
+.user-menu__theme button { flex: 1; padding: 0.35rem 0.4rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
+  color: var(--ink); font: inherit; font-size: 0.78rem; cursor: pointer; text-align: center; }
+.user-menu__theme button[aria-pressed='true'] { background: var(--info-bg); border-color: var(--signal); color: var(--info-ink); font-weight: 600; }
+.topnav__user .user-menu { min-width: 230px; }
+.user-menu__theme button { white-space: nowrap; }
