@@ -13,10 +13,18 @@ from dotenv import load_dotenv
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 REPO_ROOT = BACKEND_DIR.parent
 
-# 저장소 루트 .env (팀 공통 템플릿 기준) → backend/.env 순서로 읽는다. 이미 있는 환경변수는 덮어쓰지 않음.
-load_dotenv(REPO_ROOT / ".env")
-load_dotenv(BACKEND_DIR / ".env")
+# Docker 컨테이너에 마운트된 .env를 우선 적용
+DOCKER_ENV_PATH = Path("/app/.env")
 
+if DOCKER_ENV_PATH.is_file():
+    load_dotenv(
+        dotenv_path=DOCKER_ENV_PATH,
+        override=True,
+        encoding="utf-8-sig",
+    )
+else:
+    load_dotenv(REPO_ROOT / ".env")
+    load_dotenv(BACKEND_DIR / ".env")
 
 def _database_uri() -> str:
     host = os.getenv("DB_HOST", "").strip()

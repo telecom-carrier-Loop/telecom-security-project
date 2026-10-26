@@ -2,8 +2,9 @@
 from pathlib import Path
 from dotenv import load_dotenv
 
-# backend/.env (이 파일 기준 같은 폴더)
-load_dotenv(Path(__file__).resolve().parent / ".env")
+# 컨테이너의 /app/.env를 읽고 기존 환경 변수보다 우선 적용
+env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=env_path, override=True, encoding="utf-8-sig")
 
 from app import create_app
 
