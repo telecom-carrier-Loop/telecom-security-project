@@ -1,0 +1,15 @@
+﻿# Telecom security project | PC1/PC2 test suite
+# SIMULATION ONLY: no network attack, privilege escalation, or sensitive file modifications.
+# Save .txt, open in Notepad, paste the PowerShell block into PowerShell.
+
+# SOURCE: monitoring/graylog/attack-test/WZ-100230_Linux보안로그변경.txt
+# ROUTE: PC1 Windows => PC1 Wazuh Manager logtest (offline decoder/rule engine; not alert stream)
+# TARGET: 100230 Linux security-log change
+# Result is a test signal, not proof of a real attack.
+# This is a Wazuh FIM/rule-engine scenario. Its real rule depends on actual Manager rules and Agent FIM observations.
+# PC1 Windows Agent cannot safely recreate a PC2 Linux /etc/ssh or k3s change locally.
+# Read-only checks on PC1 Wazuh Manager (PowerShell):
+docker exec wazuh-manager /var/ossec/bin/wazuh-analysisd -t
+docker exec wazuh-manager sh -c "grep -R -n '100230\|100231\|100236\|100237' /var/ossec/etc/rules || true"
+# To verify the actual Linux detection end-to-end, run the same-named file under PC2_to_PC1.
+# That PC2 file tests the confirmed 100498 lab rule rather than the real scenario ID.

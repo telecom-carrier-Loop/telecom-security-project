@@ -1,0 +1,36 @@
+﻿# Telecom security project | PC1/PC2 test suite
+# SIMULATION ONLY: no network attack, privilege escalation, or sensitive file modifications.
+# Save .txt, open in Notepad, paste the PowerShell block into PowerShell.
+
+# SOURCE: monitoring/graylog/attack-test/EX-01_단독포트스캔.txt
+# ROUTE: Graylog GELF UDP 192.168.3.18:12201
+# TARGET: ED-EX-01
+# Result is a test signal, not proof of a real attack.
+$GraylogIP = '192.168.3.18'
+$UdpPort = 12201
+$Count = 3
+$udp = [System.Net.Sockets.UdpClient]::new()
+try {
+  for ($i=1; $i -le $Count; $i++) {
+    $log = @{
+      version = '1.1'
+      host = 'telecom-test-pc2'
+      short_message = "[SIMULATED] EX-01_______ event $i/$Count"
+      level = 4
+    _rule = 'portscan'
+    _src_ip = '198.51.100.41'
+    _test_source = 'TELECOM-MIGRATION-20261026'
+    _simulation = 'true'
+    _test_case = 'EX-01_단독포트스캔'
+    _test_origin = 'graylog-gelf'
+    }
+    $log._test_seq = $i
+    $json = $log | ConvertTo-Json -Compress -Depth 8
+    $bytes = [Text.Encoding]::UTF8.GetBytes($json)
+    [void]$udp.Send($bytes, $bytes.Length, $GraylogIP, $UdpPort)
+    Start-Sleep -Milliseconds 170
+  }
+} finally { $udp.Dispose() }
+Write-Host "Sent $Count synthetic GELF messages. Check Graylog Search then Events then n8n then Discord."
+# Graylog Search: test_case:EX-01_______
+# Some ED rules require counts/fields; check the matching ED is enabled and event notification URL is PC2 n8n.

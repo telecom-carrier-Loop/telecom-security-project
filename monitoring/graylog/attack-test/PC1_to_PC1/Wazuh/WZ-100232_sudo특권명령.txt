@@ -1,0 +1,14 @@
+﻿# Telecom security project | PC1/PC2 test suite
+# SIMULATION ONLY: no network attack, privilege escalation, or sensitive file modifications.
+# Save .txt, open in Notepad, paste the PowerShell block into PowerShell.
+
+# SOURCE: monitoring/graylog/attack-test/WZ-100232_sudo특권명령.txt
+# ROUTE: PC1 Windows => PC1 Wazuh Manager logtest (offline decoder/rule engine; not alert stream)
+# TARGET: 100232 sudo privileged command
+# Result is a test signal, not proof of a real attack.
+# PC1 manager will test this example against installed decoders/rules.
+# Phase 3 may show a DIFFERENT rule ID. logtest does not generate real alerts.json, Graylog events or Discord.
+$sample = 'Oct 26 10:00:00 pc1-lab sudo: labuser : TTY=pts/0 ; PWD=/home/labuser ; USER=root ; COMMAND=/usr/bin/id'
+$sample | docker exec -i wazuh-manager /var/ossec/bin/wazuh-logtest
+if ($LASTEXITCODE -ne 0) { Write-Warning 'Wazuh logtest failed; inspect Manager installed rules.' }
+# To verify the full ingestion path, use the same-named PC2_to_PC1 test and look for lab Rule 100498.

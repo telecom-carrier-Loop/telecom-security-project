@@ -1,0 +1,136 @@
+{
+  "source": "GitHub attack-test main",
+  "content_pack": "uploaded ED",
+  "items": [
+    {
+      "name": "EX-01_단독포트스캔",
+      "route": "graylog",
+      "target": "ED-EX-01"
+    },
+    {
+      "name": "EX-02_SYN_Flood탐지",
+      "route": "graylog",
+      "target": "ED-EX-02"
+    },
+    {
+      "name": "EX-03_LowAndSlow_비활성",
+      "route": "graylog",
+      "target": "ED-EX-03"
+    },
+    {
+      "name": "EX-04_심야로그인",
+      "route": "graylog",
+      "target": "ED-EX-04"
+    },
+    {
+      "name": "EX-05_SQLInjection",
+      "route": "graylog",
+      "target": "ED-EX-05"
+    },
+    {
+      "name": "EX-06_내부비인가접근",
+      "route": "graylog",
+      "target": "ED-EX-06"
+    },
+    {
+      "name": "EX-07_로그변조_비활성",
+      "route": "graylog",
+      "target": "ED-EX-07"
+    },
+    {
+      "name": "EX-08_Nikto스캐너",
+      "route": "graylog",
+      "target": "ED-EX-08"
+    },
+    {
+      "name": "K09-01_다중포트접근",
+      "route": "graylog",
+      "target": "ED-K09-01"
+    },
+    {
+      "name": "K09-02_TCP_SYN급증",
+      "route": "graylog",
+      "target": "ED-K09-02"
+    },
+    {
+      "name": "K09-03_IP별패킷과다",
+      "route": "graylog",
+      "target": "ED-K09-03"
+    },
+    {
+      "name": "WZ-100230_Linux보안로그변경",
+      "route": "wazuh",
+      "target": "100498 PC2/ offline on PC1; original ID 100230 not proven"
+    },
+    {
+      "name": "WZ-100231_SSH및감사설정변경",
+      "route": "wazuh",
+      "target": "100498 PC2/ offline on PC1; original ID 100231 not proven"
+    },
+    {
+      "name": "WZ-100232_sudo특권명령",
+      "route": "wazuh",
+      "target": "100498 PC2/ offline on PC1; original ID 100232 not proven"
+    },
+    {
+      "name": "WZ-100233_Linux사용자그룹변경",
+      "route": "wazuh",
+      "target": "100498 PC2/ offline on PC1; original ID 100233 not proven"
+    },
+    {
+      "name": "WZ-100234_rootSSH로그인성공",
+      "route": "wazuh",
+      "target": "100498 PC2/ offline on PC1; original ID 100234 not proven"
+    },
+    {
+      "name": "WZ-100235_허용되지않은SSH계정",
+      "route": "wazuh",
+      "target": "100498 PC2/ offline on PC1; original ID 100235 not proven"
+    },
+    {
+      "name": "WZ-100236_Flaskk3s설정변경",
+      "route": "wazuh",
+      "target": "100498 PC2/ offline on PC1; original ID 100236 not proven"
+    },
+    {
+      "name": "WZ-100237_Flaskk3s파일삭제",
+      "route": "wazuh",
+      "target": "100498 PC2/ offline on PC1; original ID 100237 not proven"
+    },
+    {
+      "name": "Wazuh_실제룰엔진_logtest_보조",
+      "route": "wazuh",
+      "target": "logtest reference"
+    },
+    {
+      "name": "graylog 4번 8번 테스트",
+      "route": "graylog",
+      "target": "ED-04 / ED-08"
+    },
+    {
+      "name": "wazuh경보",
+      "route": "empty",
+      "target": "original empty"
+    },
+    {
+      "name": "관리자 권한 RBAC 감사",
+      "route": "graylog",
+      "target": "ED-01"
+    },
+    {
+      "name": "다중공격",
+      "route": "graylog",
+      "target": "ED-05 cardinality two rules"
+    },
+    {
+      "name": "웹스캐너 404 폭주",
+      "route": "graylog",
+      "target": "ED-09"
+    },
+    {
+      "name": "인시던트 승격",
+      "route": "graylog",
+      "target": "ED-07"
+    }
+  ]
+}

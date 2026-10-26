@@ -1,0 +1,38 @@
+﻿# Telecom security project | PC1/PC2 test suite
+# SIMULATION ONLY: no network attack, privilege escalation, or sensitive file modifications.
+# Save .txt, open in Notepad, paste the PowerShell block into PowerShell.
+
+# SOURCE: monitoring/graylog/attack-test/웹스캐너 404 폭주.txt
+# ROUTE: Graylog GELF UDP 127.0.0.1:12201
+# TARGET: ED-09
+# Result is a test signal, not proof of a real attack.
+$GraylogIP = '127.0.0.1'
+$UdpPort = 12201
+$Count = 35
+$udp = [System.Net.Sockets.UdpClient]::new()
+try {
+  for ($i=1; $i -le $Count; $i++) {
+    $log = @{
+      version = '1.1'
+      host = 'telecom-test-pc1'
+      short_message = "[SIMULATED] _____404___ event $i/$Count"
+      level = 4
+    _rule = 'web-scan'
+    _src_ip = '198.51.100.41'
+    _test_source = 'TELECOM-MIGRATION-20261026'
+    _simulation = 'true'
+    _test_case = '웹스캐너 404 폭주'
+    _test_origin = 'graylog-gelf'
+    _status_code = 404
+    _http_method = 'GET'
+    }
+    $log._test_seq = $i
+    $json = $log | ConvertTo-Json -Compress -Depth 8
+    $bytes = [Text.Encoding]::UTF8.GetBytes($json)
+    [void]$udp.Send($bytes, $bytes.Length, $GraylogIP, $UdpPort)
+    Start-Sleep -Milliseconds 170
+  }
+} finally { $udp.Dispose() }
+Write-Host "Sent $Count synthetic GELF messages. Check Graylog Search then Events then n8n then Discord."
+# Graylog Search: test_case:"_____404___"
+# Some ED rules require counts/fields; check the matching ED is enabled and event notification URL is PC2 n8n.

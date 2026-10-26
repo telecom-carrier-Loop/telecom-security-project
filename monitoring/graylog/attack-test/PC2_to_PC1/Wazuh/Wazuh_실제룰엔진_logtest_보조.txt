@@ -1,0 +1,11 @@
+﻿# Telecom security project | PC1/PC2 test suite
+# SIMULATION ONLY: no network attack, privilege escalation, or sensitive file modifications.
+# Save .txt, open in Notepad, paste the PowerShell block into PowerShell.
+
+# SOURCE: monitoring/graylog/attack-test/Wazuh_실제룰엔진_logtest_보조.txt
+# ROUTE: Local Wazuh Manager offline engine
+# TARGET: supplementary manual checks
+# Result is a test signal, not proof of a real attack.
+docker exec wazuh-manager /var/ossec/bin/wazuh-analysisd -t
+docker exec -it wazuh-manager /var/ossec/bin/wazuh-logtest
+# Paste representative Linux logs into logtest; phase 3 shows actual rule; not E2E.

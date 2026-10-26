@@ -1,0 +1,10 @@
+﻿# Telecom security project | PC1/PC2 test suite
+# SIMULATION ONLY: no network attack, privilege escalation, or sensitive file modifications.
+# Save .txt, open in Notepad, paste the PowerShell block into PowerShell.
+
+# SOURCE: monitoring/graylog/attack-test/wazuh경보.txt
+# ROUTE: Diagnostic guide
+# TARGET: SOURCE FILE WAS EMPTY
+# Result is a test signal, not proof of a real attack.
+# Original repository wazuh경보.txt is empty; no attack/test command can be reconstructed from it.
+# For a concrete verification, use the WZ-100230...100237 tests or the Wazuh_실제룰엔진_logtest_보조 guide.

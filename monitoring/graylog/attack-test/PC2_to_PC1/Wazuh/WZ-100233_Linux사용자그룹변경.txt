@@ -1,0 +1,27 @@
+﻿# Telecom security project | PC1/PC2 test suite
+# SIMULATION ONLY: no network attack, privilege escalation, or sensitive file modifications.
+# Save .txt, open in Notepad, paste the PowerShell block into PowerShell.
+
+# SOURCE: monitoring/graylog/attack-test/WZ-100233_Linux사용자그룹변경.txt
+# ROUTE: PC2 Windows => SSH PC2 Ubuntu Wazuh Agent => PC2 Wazuh Manager => PC1 Graylog
+# TARGET: WZ 100233 Linux user/group change; current LAB RULE is 100498, NOT 100233
+# Result is a test signal, not proof of a real attack.
+$UbuntuHost = '192.168.7.100'
+$UbuntuUser = 'loop'
+$LogPath = '/var/log/wazuh-lab/ui-tests.jsonl'
+$entry = @{
+ telecom_test_marker='TELECOM_PC2_LAB'
+ telecom_test_scenario='WZ-100233'
+ telecom_test_origin='monitoring/graylog/attack-test/WZ-100233_Linux사용자그룹변경.txt'
+ telecom_test_description='Linux user/group change'
+ telecom_test_class='wazuh-lab-json'
+ telecom_test_simulated='true'
+ telecom_test_run_id=[guid]::NewGuid().ToString()
+ telecom_test_time_utc=[DateTime]::UtcNow.ToString('o')
+ telecom_test_warning='simulation only; Wazuh lab rule 100498; not original WZ 100233'
+} | ConvertTo-Json -Compress
+$entry | ssh -o BatchMode=yes "$UbuntuUser@$UbuntuHost" "tee -a $LogPath"
+if ($LASTEXITCODE -ne 0) { throw "SSH delivery failed ($LASTEXITCODE)" }
+Write-Host 'SSH append completed. Check PC2 Wazuh Rule 100498, PC1 Graylog wazuh_rule_id:100498.'
+# IMPORTANT: ED-WZ-02 requires real 100230..100237 alerts, and is disabled in the supplied content pack.
+# DO NOT claim ED-WZ-02 will fire from this lab JSON, and do not change SSH, sudo, root or system config.
