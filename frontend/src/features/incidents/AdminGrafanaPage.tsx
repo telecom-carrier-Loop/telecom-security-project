@@ -3,15 +3,17 @@ import ErrorState from '../../components/common/ErrorState'
 import Loading from '../../components/common/Loading'
 import type { MonitoringLink } from '../../services/types'
 import { useApi } from '../../utils/useApi'
+import { useTheme, withGrafanaTheme } from '../../utils/theme'
 
 // 관제 지표: Grafana 대시보드를 관리자 화면 안에 띄운다 (GRAFANA_EMBED_URL).
 // Grafana 는 읽기 전용(grafana_ro) 데이터 소스만 쓰고, 이 화면 자체는 관리자 로그인 뒤에만 보인다.
 export default function AdminGrafanaPage() {
   const { loading, error, data, reload } = useApi<{ links: MonitoringLink[]; grafana_embed_url: string | null }>('/admin/monitoring-links')
   const [key, setKey] = useState(0)
+  const { theme } = useTheme()
   if (loading) return <Loading />
   if (error || !data) return <ErrorState error={error} onRetry={reload} />
-  const url = data.grafana_embed_url
+  const url = data.grafana_embed_url ? withGrafanaTheme(data.grafana_embed_url, theme) : null
   const grafana = data.links.find((l) => l.key === 'grafana')
 
   return (

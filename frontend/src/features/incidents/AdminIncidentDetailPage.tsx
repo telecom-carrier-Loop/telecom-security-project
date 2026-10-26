@@ -3,10 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { deleteIncidents } from './deleteIncidents'
 import ErrorState from '../../components/common/ErrorState'
 import Loading from '../../components/common/Loading'
-import Tag, { incidentTone, severityTone } from '../../components/common/Tag'
+import Tag, { SeverityTag, incidentTone } from '../../components/common/Tag'
 import { ApiError, api } from '../../services/apiClient'
 import type { IncidentDetail, IncidentStatus } from '../../services/types'
-import { INCIDENT_STATUS, SEVERITY_LABEL, dateTime } from '../../utils/format'
+import { INCIDENT_STATUS, dateTime } from '../../utils/format'
 import { useApi } from '../../utils/useApi'
 
 // 서버 TRANSITIONS 와 같은 규칙 (버튼 표시용일 뿐, 실제 검증은 서버)
@@ -64,7 +64,7 @@ export default function AdminIncidentDetailPage() {
         <article className="panel">
           <h2>탐지 정보</h2>
           <dl className="facts">
-            <div><dt>심각도</dt><dd><Tag tone={severityTone(i.severity)}>{SEVERITY_LABEL[i.severity]}</Tag></dd></div>
+            <div><dt>심각도</dt><dd><SeverityTag severity={i.severity} /></dd></div>
             <div><dt>출처</dt><dd>{i.source}</dd></div>
             <div><dt>이벤트 종류</dt><dd className="mono">{i.event_type}</dd></div>
             <div><dt>원본 이벤트 ID</dt><dd className="mono">{i.event_id}</dd></div>

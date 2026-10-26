@@ -2,6 +2,7 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../app/providers/AuthProvider'
 import Dropdown from '../common/Dropdown'
 import Logo from '../common/Logo'
+import { ThemeMenuItem, ThemeToggle } from '../common/ThemeControls'
 
 // 홈은 로고를 누르면 간다. 프로필·1:1 문의·로그아웃은 이름 메뉴에.
 const NAV = [
@@ -26,17 +27,22 @@ export default function CustomerLayout() {
           {NAV.map((n) => <NavLink key={n.to} to={n.to} end={n.end} className="nav__link">{n.label}</NavLink>)}
           {isAdmin && <NavLink to="/admin" className="nav__link">관리자 화면</NavLink>}
         </nav>
-        <Dropdown label={`${user?.name ?? ''}님`} className="topnav__user">
-          {(close) => (
-            <>
-              <li className="user-menu__meta">{user?.email}</li>
-              <li><Link to="/settings" onClick={close}>프로필 설정</Link></li>
-              <li><Link to="/support" onClick={close}>1:1 문의</Link></li>
-              <li className="user-menu__sep" role="separator" />
-              <li><button type="button" onClick={() => { close(); onLogout() }}>로그아웃</button></li>
-            </>
-          )}
-        </Dropdown>
+        <div className="topnav__actions">
+          <ThemeToggle />
+          <Dropdown label={`${user?.name ?? ''}님`} className="topnav__user">
+            {(close) => (
+              <>
+                <li className="user-menu__meta">{user?.email}</li>
+                <ThemeMenuItem />
+                <li className="user-menu__sep" role="separator" />
+                <li><Link to="/settings" onClick={close}>프로필 설정</Link></li>
+                <li><Link to="/support" onClick={close}>1:1 문의</Link></li>
+                <li className="user-menu__sep" role="separator" />
+                <li><button type="button" onClick={() => { close(); onLogout() }}>로그아웃</button></li>
+              </>
+            )}
+          </Dropdown>
+        </div>
       </header>
       <div className="main">
         <main id="content"><Outlet /></main>

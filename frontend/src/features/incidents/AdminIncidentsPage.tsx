@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import ErrorState from '../../components/common/ErrorState'
 import Loading from '../../components/common/Loading'
-import Tag, { incidentTone, severityTone } from '../../components/common/Tag'
+import Tag, { SeverityTag, incidentTone } from '../../components/common/Tag'
 import type { Incident } from '../../services/types'
 import { INCIDENT_STATUS, SEVERITY_LABEL, compactDateTime } from '../../utils/format'
 import { useApi } from '../../utils/useApi'
@@ -60,7 +60,7 @@ export default function AdminIncidentsPage() {
                   <tr key={i.id}>
                     <td><input type="checkbox" aria-label={`${i.title} 선택`} checked={selected.includes(i.id)}
                                onChange={() => setSelected((s) => (s.includes(i.id) ? s.filter((x) => x !== i.id) : [...s, i.id]))} /></td>
-                    <td><Tag tone={severityTone(i.severity)}>{SEVERITY_LABEL[i.severity]}</Tag></td>
+                    <td><SeverityTag severity={i.severity} /></td>
                     <td className="wrap"><Link to={`/admin/incidents/${i.id}`}>{i.title}</Link><div className="muted mono">{i.event_type}</div></td>
                     <td>{i.source}</td><td>{compactDateTime(i.detected_at)}</td>
                     <td>{i.assigned_to?.name ?? <span className="muted">미배정</span>}</td>
