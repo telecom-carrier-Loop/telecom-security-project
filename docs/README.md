@@ -11,6 +11,7 @@
 
 ## 최신 현장 기록
 
+- [2026-10-26 pfSense HTTPS·관리자 접속 구성과 학원망 장애 인계: 미해결 ARP·반환 경로·서비스 IP 계획](operations/2026-10-26-pfsense-https-access.md)
 - [2026-10-25 인프라 후속 정리: k3s HTTPS·격리 복원·백업 Discord 감시·재배포 확인](operations/2026-10-25-infra-status.md)
 - [2026-10-23 학원망·VLAN 미분리·VM k3s 구성도](../network/diagrams/academy-k3s-20261023.md)
 - [구성도 변경의 저장소 분석 근거와 남은 검증](architecture/academy-network-20261023.md)
