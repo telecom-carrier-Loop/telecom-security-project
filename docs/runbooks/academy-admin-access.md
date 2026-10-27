@@ -1,6 +1,69 @@
 # 학원망 공통 HTTPS 주소의 ADMIN 권한 기반 접근 전환
 
-상태: **실행 안내 / 현장 적용 전**. 2026-10-27 사용자 요청에 따라 PC1·PC2·PC3 이외의 학원망 PC를 프로젝트 외부 사용자로 정의한다. 인터넷 공개나 VLAN 분리는 아니다.
+상태: **전환 도구 구현·시험 / 현장 적용 전**. 2026-10-27 사용자 요청에 따라 PC1·PC2·PC3 이외의 학원망 PC를 프로젝트 외부 사용자로 정의한다. 접속 PC 구분 없이 같은 공개 주소에서 ADMIN 계정은 관리자 페이지를 사용할 수 있도록 전환한다. 인터넷 공개나 VLAN 분리는 아니다.
+
+## 자동 적용 도구로 진행
+
+`infrastructure/tools/k3s-admin-access.py`는 PC1 Ubuntu에서 실행하는 Python 표준 라이브러리 기반 도구다. 새 브랜치는 `admin-role-access-20261027`이며 codex 접두어를 사용하지 않는다. DB 계정·방화벽·9443 정책은 수정하지 않고, 현재 공개 ConfigMap의 알려진 관리자 404 차단만 제거한다. 기존 React RequireAuth와 Flask roles_required를 유지한다.
+
+적용 전 두 API 모두 Ready인지 확인하고 실제 실행 이미지의 모든 관리자 route에 ADMIN 래퍼가 있는지 검사한다. 각 API의 익명 dashboard 요청이 401인지도 검사한다. `/api/internal` 차단과 기존 web/API upstream이 다르거나 알려지지 않은 관리자 location이 있으면 설정을 변경하지 않는다. 두 edge Pod의 현재 TLS 환경에서 수정본 `nginx -t`를 수행한다.
+
+PC1 Ubuntu에서 도구만 받는다. 기존 수정 파일에 git pull/reset을 수행하지 않는다.
+
+```bash
+bash <<'BASH'
+set -euo pipefail
+cd "$HOME/telecom-security-project"
+git fetch origin
+git show origin/admin-role-access-20261027:infrastructure/tools/k3s-admin-access.py > "$HOME/k3s-admin-access.py"
+python3 -m py_compile "$HOME/k3s-admin-access.py"
+BASH
+```
+
+위 명령 성공 후 계획을 만든다.
+
+```bash
+sudo -v
+python3 "$HOME/k3s-admin-access.py" plan
+```
+
+계획은 private 작업 폴더에 원본·수정본·state를 저장하고 diff를 표시한다. edge Pod의 임시 `/tmp` 파일로 검사하되 서비스 설정을 바꾸지는 않는다. `PLAN OK`가 있어야 진행한다. 실행 중인 API 보호 검사나 Nginx 검사에서 멈추면 그 결과를 확인하며 검사를 우회하지 않는다.
+
+계획 성공 후:
+
+```bash
+loopAdminWork="$(cat "$HOME/.telecom-admin-access-workdir")"
+python3 "$HOME/k3s-admin-access.py" apply --work-dir "$loopAdminWork"
+```
+
+현재 ConfigMap/Deployment가 계획 때와 달라졌거나 수정본이 임의 변경됐으면 중단한다. 적용 시 nginx.conf 키만 갱신한 뒤 공개 edge Pod를 **하나씩** 재생성하고 각 교체 후 두 Pod Ready를 기다린다. 이는 두 노드 필수 anti-affinity에서 세 번째 Pod를 대기시키지 않기 위한 방식이며 Deployment의 이미지·replica·strategy는 바꾸지 않는다. 순차 교체 중 살아 있는 연결은 끊길 수 있으므로 짧은 점검 시간에 진행한다.
+
+```bash
+python3 "$HOME/k3s-admin-access.py" status --work-dir "$loopAdminWork"
+```
+
+`applied-needs-role-tests`, candidate 일치 True, Ready edge 2가 기대값이다. 다른 학원 PC에서 아래 표를 검증해야 완료다.
+
+| 시험 | 기대 결과 |
+|---|---|
+| 프로젝트 CA 신뢰 후 https://192.168.3.30 접속 | HTTPS 정상·일반 웹 정상 |
+| 익명 /api/admin/dashboard | 401 JSON |
+| CUSTOMER 로그인 후 같은 API | 403 |
+| ADMIN 로그인 후 /admin 및 같은 API | 관리자 데이터 표시 / 200 |
+| 내부 자동화 API | 기존 edge 404 차단 유지 |
+| PC1·PC2 DB 3306 직접 접근 | 일반 사용자 PC에서 기존 차단 유지 |
+
+계정별 테스트는 별도 브라우저 프로필·로그아웃 후 재로그인으로 구분한다. PC1·PC2·PC3 이외의 PC에서도 반드시 ADMIN 시험을 수행한다. IP·호스트 이름·프론트엔드 플래그를 관리자 권한 판정에 사용하지 않는다. CSRF와 권한 회수 검증은 아래 수동 검증 항목을 따른다.
+
+교체 실패 시 도구가 원본 복구를 시도한다. 오류 후 state 파일을 지우거나 apply를 반복하지 않는다. 수동 복구:
+
+```bash
+python3 "$HOME/k3s-admin-access.py" rollback --work-dir "$loopAdminWork"
+```
+
+복구는 원래 공개 관리자 404 차단을 되돌리고 두 edge Pod를 다시 순차 교체한다. 동료가 nginx.conf를 바꾸면 덮어쓰지 않고 중단한다. 작업 폴더·포인터는 비공개로 보관하고 Git에 올리지 않는다.
+
+도구의 변환·권한 검사·잘못된/동시 변경 거부·원본 보존·순차 교체·실패 복구를 모의 클러스터 시험으로 검증했다. 실서버 적용·외부 PC의 CUSTOMER/ADMIN 시험은 아직 수행하지 않았다. 아래 수동 수정 절차는 대안이며 자동 적용 중 혼용하지 않는다.
 
 ## 목표와 변경 범위
 
