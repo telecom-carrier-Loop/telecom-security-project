@@ -24,7 +24,7 @@ PC1 Docker 게시 서비스: API 5000, Grafana 3000, Graylog TCP 9000/12201·UDP
 1. 실제 호스트 IP·Public 프로필·기본 Block/Allow 정책·기존 Docker TCP 규칙 필터·3306 소유 프로세스를 검사한다. 다른 프로그램이 3306을 열고 있거나 보고서와 다르면 변경 전에 중단한다.
 2. 전체 방화벽 정책 before.wfw와 원래 Public 활성 상태, 변경 규칙 이름을 다운로드 폴더에 저장한다.
 3. 원래 Docker 프로그램·Public 프로필의 TCP 허용을 `1-3305,3307-65535`로 나눈 대체 규칙을 생성한다. **이것은 다른 Docker TCP 포트의 기존 노출을 유지하는 과도기 설정이며 전체 서비스 최소 권한 구성 완료가 아니다.**
-4. PC1의 Docker TCP 3306은 `127.0.0.1`, `::1`, `.3.18`, `.3.19`, `.7.185`, `.7.100`에 허용한다. PC2는 로컬 `127.0.0.1`, `::1`, `.3.19`만 허용한다. 앱이 인식한 `172.17.0.1`을 Windows 원본 허용 목록으로 사용하지 않는다.
+4. PC1의 Docker TCP 3306은 `127.0.0.1`, `.3.18`, `.3.19`, `.7.185`, `.7.100`에 허용한다. PC2는 로컬 `127.0.0.1`, `.3.19`만 허용한다. Windows가 규칙 원본으로 거부한 IPv6 루프백 `::1`은 포함하지 않는다. 앱이 인식한 `172.17.0.1`을 Windows 원본 허용 목록으로 사용하지 않는다.
 5. PC1 Graylog UDP 1514/5140/12201은 학원 실습 대역 `.3.0/24`, `.7.0/24`에서 허용한다. 이미 더 넓은 UDP 규칙이 있다면 이 추가 규칙만으로 범위가 좁아진 것은 아니다. 네이티브 TCP 10050 listener가 있으면 Zabbix 서버 후보 PC1·PC2 주소의 접속을 준비한다.
 6. 확인된 기존 Docker TCP Any 규칙만 비활성화하고 **현재 사용 중인 Public 프로필만** 활성화한다. Domain·Private는 변경하지 않는다. Private는 여전히 꺼져 있으므로 다른 프로필까지 완료됐다고 기록하지 않는다.
 7. 적용 실패 시 도구가 만든 규칙과 원래 Docker 규칙·Public 활성 상태를 복원한다. 성공 후 네트워크 회귀 시험이 실패하면 Rollback을 사용한다. 이전 Public이 꺼져 있었다면 복구 시 그 상태로 돌아가므로 문제 해결 후 제한 정책을 다시 준비해야 한다.
@@ -128,9 +128,40 @@ powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File "$loopFirewall
 
 원래 규칙을 삭제하지 않으므로 정확한 이름으로 다시 활성화한다. 다른 기존 방화벽 규칙은 삭제하지 않는다. 이전 프로필 상태로 되돌린 뒤 장애 원인을 점검한다. before.wfw 전체 import는 다른 사람의 후속 변경까지 덮어쓸 수 있어 자동으로 실행하지 않는다. 도구는 롤백 소유권·역할·로컬 IP를 검사하고 상태 파일이 있으면 Apply 재실행을 거절한다.
 
+## 현장 첫 적용 실패와 복구 후 재시도
+
+초기 PC1 Apply에서 `New-NetFirewallRule`이 RemoteAddress의 `::1`을 거부했다. 자동 복구도 `System.Boolean False`를 NetSecurity의 `GpoBoolean`으로 변환하지 못해 중단됐다. 도구 오류이며 계정·DB 오류가 아니다. 코드 순서상 첫 NonDB 규칙이 남았을 수 있고, 기존 Docker 규칙과 Public 프로필의 최종 상태는 Status로 확인해야 한다.
+
+수정본은 `::1`을 제거하고, 프로필 활성 상태를 enum 이름 문자열 `'True'`/`'False'`로 전달한다. 실패 당시 state.json과 before.wfw를 지우지 않는다.
+
+1. 위 단계 1로 도구를 다시 가져온다.
+2. PC1에서 수정본 `-Role PC1 -Action Rollback`을 실행한다. 정상 메시지는 `Restored the previous Public profile state and the original Docker rule.`이다.
+3. 기본 상태 디렉터리의 Status에서 `rolled-back`을 확인한다. 복구는 이전 Public 비활성 상태로 돌아갈 수 있다. 여기서 또 오류가 나면 새 Apply를 실행하지 않는다.
+4. 이전 상태 파일을 보존하고 새 디렉터리에서 재시도한다.
+
+```powershell
+$loopFirewallRetry = Join-Path $env:USERPROFILE ('Downloads\telecom-db-scope-PC1-retry-' + (Get-Date -Format yyyyMMdd-HHmmss))
+powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File "$loopFirewallTool" -Role PC1 -Action Plan -StateDirectory "$loopFirewallRetry"
+```
+
+Plan 성공 후:
+
+```powershell
+powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File "$loopFirewallTool" -Role PC1 -Action Apply -StateDirectory "$loopFirewallRetry"
+```
+
+Apply 성공 후:
+
+```powershell
+powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File "$loopFirewallTool" -Role PC1 -Action Status -StateDirectory "$loopFirewallRetry"
+```
+
+이 재시도의 복구도 같은 `-StateDirectory "$loopFirewallRetry"`를 지정한다. PC2에는 수정본을 내려받고, PC1의 연결·관제 검증이 끝난 뒤 적용한다.
+
 ## 검증 범위
 
 - PowerShell 문법 및 모의 방화벽 시험으로 Plan 무변경, 잘못된 호스트·프로필·listener·규칙 변경 거부, PC1 원본 보존, PC2 로컬 제한, 관제 허용 준비, 부분 실패 복구를 검사했다.
+- 초기 모의 시험은 실제 API의 IPv6 loopback 거부와 GpoBoolean 바인딩 차이를 잡지 못했다. 수정 회귀 시험은 이 두 조건을 거부하는 모의 cmdlet과 중단된 이전 state의 복구→새 디렉터리 재시도를 포함한다. 실제 NetSecurity Enabled 매개변수 타입에 대한 문자열 변환도 읽기 전용으로 확인한다.
 - 모의 시험은 실제 방화벽을 바꾸지 않았다. 현장 네트워크·Docker Desktop·GPO 효과는 위 외부 연결 시험으로 확인해야 한다.
 - Public 활성화·일반 PC DB 차단·웹/복제/백업/관제·재부팅 검증의 실제 결과는 아직 없다.
 

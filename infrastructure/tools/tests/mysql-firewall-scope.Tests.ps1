@@ -61,6 +61,7 @@ function global:netsh.exe {
 }
 function global:New-NetFirewallRule { param($PolicyStore, $Enabled, $Name, $DisplayName, $Direction, $Action, $Profile, $Protocol, $LocalPort, $Program, $RemoteAddress, $Group)
     $m = $global:FirewallScopeMock; $m.Creates++
+    if ('::1' -in @($RemoteAddress)) { throw 'fixture unsupported IPv6 loopback rule address' }
     if ($m.FailCreateAt -eq $m.Creates) { throw 'fixture creation failure' }
     $m.Rules[$Name] = [pscustomobject]@{Name = $Name; Group = $Group; Enabled = 'True'; Action = $Action; Protocol = $Protocol; LocalPort = $LocalPort; RemoteAddress = $RemoteAddress; Profile = $Profile}
 }
@@ -71,8 +72,9 @@ function global:Enable-NetFirewallRule { param($PolicyStore, $Name)
     $global:FirewallScopeMock.EnableCalls++; $global:FirewallScopeMock.Rules[$Name].Enabled = 'True'
 }
 function global:Set-NetFirewallProfile { param($Profile, $Enabled)
+    if ($Enabled -isnot [string] -or $Enabled -notin @('True', 'False')) { throw 'fixture GpoBoolean requires its string name, not System.Boolean' }
     $global:FirewallScopeMock.ProfileCalls += [string]$Profile
-    $global:FirewallScopeMock.Public = [bool]$Enabled
+    $global:FirewallScopeMock.Public = $Enabled -eq 'True'
 }
 function global:Remove-NetFirewallRule { param($PolicyStore, $Name) $global:FirewallScopeMock.Rules.Remove($Name) }
 function Expect-Guard([string]$Path, [string]$Expected) {
@@ -109,7 +111,7 @@ Write-Host 'PASS: PC1 apply preserves DB sources and rollback restores only owne
 $case = New-Case PC2; $global:FirewallScopeMock.NativeAgent = $true
 & $fixture -Role PC2 -Action Apply -StateDirectory $case
 $m = $global:FirewallScopeMock
-Assert-Scope (($m.Rules['Loop-DBScope-PC2-MySQL-TCP'].RemoteAddress -join ',') -eq '127.0.0.1,::1,192.168.3.19') 'Replica DB exposed to remote users'
+Assert-Scope (($m.Rules['Loop-DBScope-PC2-MySQL-TCP'].RemoteAddress -join ',') -eq '127.0.0.1,192.168.3.19') 'Replica DB exposed to remote users'
 Assert-Scope ($m.Rules.ContainsKey('Loop-DBScope-PC2-Zabbix-Agent-TCP')) 'Listening native Zabbix agent not preserved'
 Write-Host 'PASS: PC2 DB remains local and existing native Zabbix listener is preserved'
 
@@ -119,4 +121,24 @@ try { & $fixture -Role PC1 -Action Apply -StateDirectory $case } catch { $failed
 $m = $global:FirewallScopeMock
 Assert-Scope ($failed -and -not $m.Public -and $m.Rules.Count -eq 1 -and $m.Rules[$m.LegacyName].Enabled -eq 'True') 'Partial failure did not roll back'
 Write-Host 'PASS: partial creation failure restores previous policy'
+
+# Reproduce the old interrupted attempt: NonDB rule exists, legacy remains enabled,
+# the state file is still applying, and restoring False must bind as GpoBoolean.
+$case = New-Case PC1
+& $fixture -Role PC1 -Action Apply -StateDirectory $case
+$m = $global:FirewallScopeMock
+$m.Rules[$m.LegacyName].Enabled = 'True'
+$m.Public = $false
+$null = $m.Rules.Remove('Loop-DBScope-PC1-MySQL-TCP')
+$null = $m.Rules.Remove('Loop-DBScope-PC1-Graylog-UDP')
+$statePath = Join-Path $case 'state.json'
+$saved = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+$saved.Stage = 'applying'
+$saved | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $statePath -Encoding UTF8
+& $fixture -Role PC1 -Action Rollback -StateDirectory $case
+Assert-Scope (-not $m.Public -and $m.Rules.Count -eq 1 -and $m.Rules[$m.LegacyName].Enabled -eq 'True') 'Interrupted old attempt was not recovered'
+$retry = Join-Path $testRoot ([guid]::NewGuid().ToString('N'))
+& $fixture -Role PC1 -Action Apply -StateDirectory $retry
+Assert-Scope ($m.Public -and $m.Rules[$m.LegacyName].Enabled -eq 'False') 'Retry with a fresh state directory failed'
+Write-Host 'PASS: old interrupted state recovers and fresh-state retry applies without IPv6 loopback or Boolean binding'
 Write-Host 'PASS: all tests use mocked network cmdlets; live firewall unchanged'

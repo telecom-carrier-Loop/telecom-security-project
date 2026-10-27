@@ -78,8 +78,8 @@ function Get-ScopePlan {
     }
     $prefix = 'Loop-DBScope-' + $Role + '-'
     $dbSources = if ($Role -eq 'PC1') {
-        @('127.0.0.1', '::1', '192.168.3.18', '192.168.3.19', '192.168.7.185', '192.168.7.100')
-    } else { @('127.0.0.1', '::1', '192.168.3.19') }
+        @('127.0.0.1', '192.168.3.18', '192.168.3.19', '192.168.7.185', '192.168.7.100')
+    } else { @('127.0.0.1', '192.168.3.19') }
     $specs = @(
         @{Name = $prefix + 'Docker-NonDB-TCP'; DisplayName = $prefix + 'Docker TCP except MySQL'; Direction = 'Inbound'; Action = 'Allow'; Profile = 'Public'; Protocol = 'TCP'; LocalPort = @('1-3305', '3307-65535'); Program = $program; RemoteAddress = 'Any'; Group = $group},
         @{Name = $prefix + 'MySQL-TCP'; DisplayName = $prefix + 'MySQL approved sources'; Direction = 'Inbound'; Action = 'Allow'; Profile = 'Public'; Protocol = 'TCP'; LocalPort = '3306'; Program = $program; RemoteAddress = $dbSources; Group = $group}
@@ -104,7 +104,8 @@ function Restore-ScopeState($State) {
         if ($null -ne $rule -and [string]$rule.Group -ne $group) { throw 'Rule ownership changed; stop rollback.' }
     }
     Enable-NetFirewallRule -PolicyStore PersistentStore -Name $legacyName
-    Set-NetFirewallProfile -Profile Public -Enabled $State.PreviousPublicEnabled
+    $previousEnabled = if ($State.PreviousPublicEnabled) { 'True' } else { 'False' }
+    Set-NetFirewallProfile -Profile Public -Enabled $previousEnabled
     foreach ($name in @($State.NewRules)) {
         if ($null -ne (Get-NetFirewallRule -PolicyStore PersistentStore -Name $name -ErrorAction SilentlyContinue)) {
             Remove-NetFirewallRule -PolicyStore PersistentStore -Name $name
@@ -144,7 +145,7 @@ if ($Action -eq 'Plan') {
     Write-Host 'Plan only. No settings changed. Only Public will be enabled; other profiles remain unchanged.'
     return
 }
-if (Test-Path -LiteralPath $stateFile) { throw 'State already exists. Use Status or Rollback; do not repeat Apply.' }
+if (Test-Path -LiteralPath $stateFile) { throw 'State already exists. Use Status or Rollback; after rollback use a new StateDirectory for a retry.' }
 foreach ($spec in $plan.Specs) {
     if ($null -ne (Get-NetFirewallRule -PolicyStore PersistentStore -Name $spec.Name -ErrorAction SilentlyContinue)) {
         throw 'A new rule name already exists; nothing changed.'
@@ -161,7 +162,7 @@ Save-ScopeState $state
 try {
     foreach ($spec in $plan.Specs) { $null = New-NetFirewallRule -PolicyStore PersistentStore -Enabled True @spec }
     Disable-NetFirewallRule -PolicyStore PersistentStore -Name $legacyName
-    Set-NetFirewallProfile -Profile Public -Enabled True
+    Set-NetFirewallProfile -Profile Public -Enabled 'True'
     $public = Get-NetFirewallProfile -PolicyStore ActiveStore -Name Public
     if ([string]$public.Enabled -ne 'True') { throw 'Public is not effectively enabled.' }
     foreach ($spec in $plan.Specs) {
