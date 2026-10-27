@@ -41,6 +41,7 @@ def create_app(config_class=Config) -> Flask:
 
 def _register_blueprints(app: Flask) -> None:
     from .dashboard.admin_routes import bp as admin_bp
+    from .dashboard.zabbix_routes import bp as zabbix_bp
     from .auth.routes import bp as auth_bp
     from .dashboard.routes import bp as dashboard_bp
     from .health.routes import bp as health_bp
@@ -55,5 +56,5 @@ def _register_blueprints(app: Flask) -> None:
     from .support.routes import bp as support_bp
 
     for bp in (health_bp, auth_bp, dashboard_bp, plans_bp, support_bp,
-               membership_bp, membership_admin_bp, shop_bp, notices_bp, payments_bp, incidents_bp, protection_bp, admin_bp):
+               membership_bp, membership_admin_bp, shop_bp, notices_bp, payments_bp, incidents_bp, protection_bp, admin_bp, zabbix_bp):
         app.register_blueprint(bp)

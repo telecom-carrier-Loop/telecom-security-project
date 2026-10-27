@@ -41,8 +41,9 @@ export default function HomePage() {
   const { user, subscription, usage, billing, membership, recent_tickets, recent_payments } = data
   const unlimited = !!usage && usage.data_limit_mb < 0
   const left = usage && !unlimited ? Math.max(usage.data_limit_mb - usage.data_used_mb, 0) : null
-  const leftRatio = usage && !unlimited ? (left ?? 0) / usage.data_limit_mb : unlimited ? 1 : 0
+  const leftRatio = usage && !unlimited && usage.data_limit_mb > 0 ? (left ?? 0) / usage.data_limit_mb : unlimited ? 1 : 0
   const greet = !subscription ? '요금제를 골라 보세요'
+    : !usage ? '이용량 수집을 기다리고 있어요'
     : unlimited ? '이번 달도 마음껏 쓰고 있어요'
     : leftRatio > 0.5 ? '이번 달도 넉넉해요'
     : leftRatio > 0.2 ? '절반 넘게 썼어요' : '데이터가 얼마 남지 않았어요'
@@ -58,16 +59,20 @@ export default function HomePage() {
         </div>
       )}
 
-      <div className="hero">
+      <div className="customer-intro">
+       <div className="hero">
         <h1 className="hero__greet">{user.name}님, {greet}</h1>
         <p className="hero__sub">{subscription ? `${subscription.plan.name} · ${subscription.phone_number}` : '회선이 없습니다'}</p>
+        <Link to={subscription ? '/usage' : '/plans'} className="btn">{subscription ? '내 이용현황 보기' : '요금제 살펴보기'}</Link>
+       </div>
+       <figure className="headquarters"><img src="/images/brand/loop-headquarters.webp" width="1536" height="1024" alt="가상 통신사 루프의 본사 외관 이미지" /><figcaption>일상을 잇는 연결, L∞P <span>가상 본사 이미지</span></figcaption></figure>
       </div>
 
       <div className="hero-card">
         <Link to="/usage" aria-label="내 이용현황 자세히">
           <Ring ratio={leftRatio}
                 label={!subscription ? '-' : unlimited ? '무제한' : left !== null ? dataSize(left) : '-'}
-                sub={unlimited ? '데이터' : '남음'} />
+                sub={!subscription ? '회선 없음' : !usage ? '수집 대기' : unlimited ? '데이터' : '남음'} />
         </Link>
         <div className="hero-card__minis">
           <Link to="/billing" className="mini">
@@ -85,9 +90,10 @@ export default function HomePage() {
         </div>
       </div>
 
+      <h2 className="section-title">자주 찾는 업무</h2>
       <nav className="shortcuts" aria-label="바로가기">
         <Link to="/billing"><Icon d={ICON.pay} />요금 납부</Link>
-        <Link to="/billing" className="shortcuts__kakao"><Icon d={ICON.kakao} />카카오페이</Link>
+        <Link to="/billing" className="shortcuts__kakao"><Icon d={ICON.kakao} />카카오페이 납부</Link>
         <Link to="/membership/shop"><Icon d={ICON.shop} />포인트 상점</Link>
         <Link to="/support"><Icon d={ICON.ask} />1:1 문의</Link>
         <Link to="/notices"><Icon d={ICON.notice} />공지사항</Link>

@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-27T08:37:23.1278673Z",
+  "title": "Design System: L∞P",
+  "extensions": {
+    "shadows": [
+      {
+        "name": "surface",
+        "value": "none",
+        "purpose": "Flat shared surfaces in both themes."
+      },
+      {
+        "name": "dropdown",
+        "value": "0 8px 24px rgba(21, 32, 43, 0.12)",
+        "purpose": "Open dropdown menus."
+      }
+    ],
+    "motion": [
+      {
+        "name": "loading-spin",
+        "value": "spin 0.8s linear infinite",
+        "purpose": "Loading indicator, disabled for reduced motion."
+      },
+      {
+        "name": "reduced-motion",
+        "value": ".01ms",
+        "purpose": "Reduced-motion animation and transition durations."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "max-1250",
+        "value": "1250px"
+      },
+      {
+        "name": "max-1024",
+        "value": "1024px"
+      },
+      {
+        "name": "max-960",
+        "value": "960px"
+      },
+      {
+        "name": "max-860",
+        "value": "860px"
+      },
+      {
+        "name": "max-768",
+        "value": "768px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Existing primary action, bound to the site's CSS variables.",
+      "html": "<button class=\"ds-btn\">이용현황 보기</button>",
+      "css": ".ds-btn{font-family:var(--font);font-size:15px;font-weight:500;border:1px solid var(--signal);background:var(--signal);color:var(--signal-ink);min-height:44px;padding:.55rem 1rem;border-radius:8px;cursor:pointer}.ds-btn:hover:not(:disabled){filter:brightness(.96)}.ds-btn:focus-visible{outline:3px solid var(--signal);outline-offset:2px}.ds-btn:disabled{opacity:.6;cursor:progress}"
+    }
+  ],
+  "narrative": {
+    "overview": "기존 블루 브랜드를 유지하고 고객의 반복 업무와 운영자의 우선 상태를 앞에 둔다. 코드에서 추출한 문서이며 새 제품 약속은 정의하지 않는다.",
+    "keyCharacteristics": [
+      "기존 블루 브랜드",
+      "목적별 탐색",
+      "의미 기반 두 테마",
+      "평면 정보 구조"
+    ],
+    "dos": [
+      "Do preserve theme tokens and explicit state labels."
+    ],
+    "donts": [
+      "Don't change API, authorization, or monitoring contracts for visual work."
+    ]
+  }
+}

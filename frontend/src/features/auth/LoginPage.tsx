@@ -26,6 +26,7 @@ export default function LoginPage() {
 
   return (
     <div className="auth">
+      <aside className="auth__intro"><Logo size="lg" /><h2>당신의 일상에,<br />끊기지 않는 연결.</h2><p>내 이용현황부터 요금 납부까지<br />루프에서 편리하게 확인하세요.</p><img src="/images/brand/loop-headquarters.webp" width="1536" height="1024" alt="가상 통신사 루프의 본사 외관 이미지" /><small>보안 프로젝트용 가상 통신사 L∞P</small></aside>
       <form className="auth__card" onSubmit={onSubmit} noValidate>
         <div className="brand"><Logo size="lg" /></div>
         <p className="auth__tagline">끊기지 않는 연결, 루프</p>

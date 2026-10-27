@@ -7,6 +7,7 @@ import type { AdminDashboard, Severity, MonitoringLink } from '../../services/ty
 import { useApi } from '../../utils/useApi'
 import { useTheme, withGrafanaTheme } from '../../utils/theme'
 import MonitoringLinks from '../../components/common/MonitoringLinks'
+import ZabbixMonitoringPanel from './ZabbixMonitoringPanel'
 
 const SEVERITIES: [Severity, string][] = [
   ['critical', '긴급'], ['high', '높음'], ['medium', '보통'], ['low', '낮음'], ['info', '정보'],
@@ -27,7 +28,14 @@ export default function AdminDashboardPage() {
   return (
     <section className="page">
       <h1 className="page__title">운영 대시보드</h1>
-      <p className="muted page__lead">{user?.name} · 기준 시각 {dateTime(new Date().toISOString())}</p>
+      <p className="muted page__lead">{user?.name} · 화면 조회 시각 {dateTime(new Date().toISOString())}</p>
+
+      <div className="attention-strip" aria-label="우선 확인할 상태">
+        <Link to="/admin/incidents" className={incidents.by_severity.critical + incidents.by_severity.high > 0 ? 'attention-item attention-item--danger' : 'attention-item'}><span>긴급·높음 인시던트</span><strong>{incidents.by_severity.critical + incidents.by_severity.high}건</strong><span>인시던트 확인 →</span></Link>
+        <Link to="/admin/privileges" className={protection.privilege_violations > 0 ? 'attention-item attention-item--warn' : 'attention-item'}><span>권한 정책 위반</span><strong>{protection.privilege_violations}명</strong><span>권한 점검 →</span></Link>
+        <Link to="/admin/support" className="attention-item"><span>답변 대기 문의</span><strong>{support.waiting}건</strong><span>문의 답변 →</span></Link>
+      </div>
+      <h2 className="section-title">업무 및 대응 현황</h2>
 
       <div className="grid grid--4">
         <Link to="/admin/incidents" className="tile">
@@ -101,7 +109,7 @@ export default function AdminDashboardPage() {
         </header>
         {mon.loading ? (
           <Loading label="관제 화면 불러오는 중" />
-        ) : embedUrl ? (
+        ) : mon.error ? <p className="notice notice--warn" role="alert">관제 설정 조회 실패 · 관제 그래프 연결 여부를 확인할 수 없습니다.</p> : embedUrl ? (
           <iframe
             className="grafana-frame grafana-frame--compact"
             src={embedUrl}
@@ -111,11 +119,11 @@ export default function AdminDashboardPage() {
           />
         ) : (
           <p className="muted">
-            서버 <span className="mono">.env</span>에 <span className="mono">GRAFANA_PANEL_URL</span>(Grafana 패널 Share → Embed 의 주소)을 넣으면 그래프 하나가 여기에 표시됩니다.
-            <Link to="/admin/grafana"> 설정 안내 보기</Link>
+            관제 그래프가 아직 연결되지 않았습니다. <Link to="/admin/grafana">관제 설정 안내 보기</Link>
           </p>
         )}
       </article>
+      <ZabbixMonitoringPanel />
       <h2 className="section-title">관제 도구 바로가기</h2>
       <MonitoringLinks variant="cards" />
     </section>
