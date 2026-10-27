@@ -20,6 +20,20 @@
 | pfSense | PC3의 단일 VM | PC3/pfSense 장애 시 현재 공통 서비스 주소도 단일 장애점 |
 | DNS·세션 | API 세션 정본은 MySQL. Nginx는 Service 이름 사용 | CoreDNS 배치/노드 간 통신과 DB가 함께 살아야 함. 남은 Pod의 단순 Running만으로 웹 정상 판정 불가 |
 
+## 10월27일 현장 요청 분산 확인 결과
+
+사용자 화면에서 두 노드 Ready, 모든 Web/API/공개·관리·자동화 edge Deployment2/2와 노드별 Pod 배치를 확인했다. API endpoint는 PC1 `10.42.0.56`, PC2 `10.42.1.32`였다.
+
+| 시험 | 확인 결과 |
+|---|---|
+| PC1 .7.185:30443 직접 연결, 검증 주소 .3.30 유지 | HTTP200 / database ok 화면 확인 |
+| PC2 .7.100:30443 직접 연결, 검증 주소 .3.30 유지 | HTTP200 / database ok 화면 확인 |
+| 공통 공개주소 readiness30회 | Request1~30 모두HTTP200 / CurlExit0 화면 확인 |
+| 같은 ha_probe 표식의 PC2 API 로그 | telecom-api-8cc569478-x7k5x:12건, 모두HTTP200 |
+| 같은 ha_probe 표식의 PC1 API 로그 | telecom-api-8cc569478-xdmvl:18건, 모두HTTP200 |
+
+서버 로그 시각은 2026-10-27 12:22 UTC대(21:22 KST대)다. 화면의 요청 번호를 합하면1~30이며 양쪽 API가40%/60%로 처리했다. 이 비율은 이번 작은 표본의 결과이지 고정 분배율이 아니다. **정상 상태의 API Service 분산은 실측 확인**했으며, 정적 Web/외부 edge의 균등 분산·PC1중단·DB승격·서비스 전체HA는 아직 시험하지 않았다.
+
 `infrastructure/keepalived/*.conf.example`에는 REPLACE_WITH_VLAN10_INTERFACE와 과거192.168.10.x가 남아 있다. 이 파일이 있다는 이유로 현재 학원망에 VIP 자동 전환이 설치됐다고 판단하지 않는다. `infrastructure/kubernetes/base`도 옛 VLAN/NodePort 예제이며 현재 현장에 전체 apply하지 않는다.
 
 ## 장애 범위별 예상
@@ -105,6 +119,73 @@ sudo k3s kubectl -n telecom logs -l app=telecom-api -c api \
 6. 먼저 Pod1개 계획 중단·재생성, 다음 PC2 VM만, 마지막으로 독립 복구 수단을 준비한 PC1 VM/물리PC 시험 순서로 진행한다. 이 문서는 지금 즉시 중단하라는 지시가 아니다.
 
 시험 기록: 장애 범위, 시작/복구 시각, HTTP 실패 수, 남은 Pod와 endpoint, 같은 URL의 접속 지속 여부, DB 쓰기 대상의 단일성, 데이터 차이, 로그인·읽기·합의된 쓰기, 감시 알림, 복구 후 역할/복제 상태. 기존 로그인 유지도 쿠키/DB 세션 의존성을 포함해 확인한다.
+
+## 다음 작은 단계: PC1 API Pod1개 재생성 시험 — 아직 미실행
+
+이 시험은 PC1의 API 컨테이너 실행본 하나만 종료하고 Deployment의 대체 실행본 생성을 관찰한다. PC1 Windows DB, Ubuntu VM, k3s 제어부와 edge는 유지한다. 전체서버 장애나 DB승격 시연으로 표시하지 않는다. 두 API가1/1이고 최근 readiness가 정상일 때 진행한다. 실제 종료 시점에 일시적인 HTTP 실패가 있으면 숨기지 않고 기록한다.
+
+### A. PC2 Windows에서 먼저60회 연속 관찰 시작
+
+```powershell
+$loopFailRun = 'podfail-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
+$loopFailResults = @()
+Write-Host "시험 ID: $loopFailRun"
+foreach ($loopFailIndex in 1..60) {
+    $loopFailTime = Get-Date -Format 'HH:mm:ss'
+    $loopFailUrl = 'https://192.168.3.30/api/health/ready?ha_probe={0}&n={1}' -f $loopFailRun, $loopFailIndex
+    $loopFailCode = & curl.exe --noproxy '*' --ssl-revoke-best-effort --connect-timeout 3 --max-time 5 -sS -o NUL -w '%{http_code}' $loopFailUrl
+    $loopFailExit = $LASTEXITCODE
+    $loopFailResults += [pscustomobject]@{ Time=$loopFailTime; Request=$loopFailIndex; HTTP=$loopFailCode; CurlExit=$loopFailExit }
+    Write-Host "$loopFailTime request=$loopFailIndex HTTP=$loopFailCode curl=$loopFailExit"
+    Start-Sleep -Seconds 1
+}
+$loopFailResults | Group-Object HTTP,CurlExit | Select-Object Name,Count
+```
+
+### B. 5건 정도 출력된 뒤 PC1 Ubuntu에서 API Pod1개만 삭제
+
+아래 블록은 실행 시점에 정상 API Pod2개와 PC1/PC2 한 개씩 배치를 다시 검사하고 PC1 API만 선택한다. 조건이 다르면 삭제하지 않고 중단한다. 노드·Deployment·DB 삭제 명령은 포함하지 않는다.
+
+```bash
+bash <<'BASH'
+set -euo pipefail
+sudo -v
+python3 - <<'PY'
+import json, subprocess
+base = ['sudo', '-n', 'k3s', 'kubectl', '-n', 'telecom']
+items = json.loads(subprocess.check_output(base + ['get', 'pods', '-l', 'app=telecom-api', '-o', 'json']))['items']
+if len(items) != 2 or {p['spec']['nodeName'] for p in items} != {'pc1-k3s', 'pc2-k3s'}:
+    raise SystemExit('중단: API Pod2개/노드별1개 조건 불일치')
+for p in items:
+    if p['metadata'].get('deletionTimestamp') or not any(c['name'] == 'api' and c.get('ready') for c in p.get('status', {}).get('containerStatuses', [])):
+        raise SystemExit('중단: API Ready 조건 불일치')
+target = next(p for p in items if p['spec']['nodeName'] == 'pc1-k3s')
+if not any(r['kind'] == 'ReplicaSet' and r.get('controller') for r in target['metadata'].get('ownerReferences', [])):
+    raise SystemExit('중단: API 컨트롤러 확인 필요')
+print('삭제 대상 API Pod:', target['metadata']['name'], flush=True)
+subprocess.run(base + ['delete', 'pod', target['metadata']['name'], '--wait=false'], check=True)
+PY
+BASH
+sudo k3s kubectl -n telecom get pods -l app=telecom-api -o wide -w
+```
+
+PC1에 새 이름의 API Pod가1/1로 복구되면 Ctrl+C로 관찰만 종료한다. 180초 이상 회복하지 못하면 추가 삭제/전체 rollout 대신 별도창의 get pods 및 describe pod/events로 원인을 확인한다. 장애 Pod에 대한 강제삭제·Replica 승격은 이 시험의 복구 방법이 아니다.
+
+### C. 결과와 PC2 처리 증거 보관
+
+PC1에서 새 API Pod1/1과 Service endpoint2개 회복을 확인한다. PC2의 시험 ID는 `$loopFailRun`으로 다시 출력할 수 있다. PC1에서 그 값을 입력하고 로그를 확인한다.
+
+```bash
+sudo k3s kubectl -n telecom get pods -l app=telecom-api -o wide
+sudo k3s kubectl -n telecom get endpointslices -l kubernetes.io/service-name=telecom-api -o wide
+read -r -p 'PC2 podfail 시험 ID: ' loopFailRun
+sudo k3s kubectl -n telecom logs -l app=telecom-api -c api \
+  --since=15m --tail=2000 --prefix=true --max-log-requests=10 | grep -F "$loopFailRun"
+```
+
+삭제된 옛 PC1 Pod의 로그는 kubectl logs 목록에서 사라질 수 있다. 이번 검증은 삭제 시각/PC2의 지속 처리/새 PC1 Pod 복구를 함께 기록한다. 모든200이면 관측 표본에서 실패0건으로 기록하며 무중단을 일반 보장하지 않는다.
+
+발표 자료 표제 예시: **「정상 상태 API 요청 분산30회 성공」**, 다음 시험이 통과하면 **「API Pod1개 종료 시 잔여Pod 처리·실행본 자동 복구」**. 「PC1 물리서버 장애의 전체서비스 자동 전환」은 진입점·DB·제어부를 보완하고 별도 시험한 후에만 사용한다.
 
 ## 근거와 참조
 
