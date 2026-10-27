@@ -1,6 +1,6 @@
 # 학원망 이중화 현황과 단계별 시험
 
-2026-10-27 저장소 설정·현장 화면·사용자 보고 기준. 이 문서는 점검 결과와 시험 절차이며 장애 주입이나 실제 PC/VM 종료를 수행한 기록이 아니다.
+2026-10-28 갱신. 저장소 설정·현장 화면·사용자 보고 기준의 점검 및 시험 기록이다. 문서 작성 환경에서 학원 서버에 직접 접속한 결과는 아니며 실제 PC/VM 전체 종료는 확인되지 않았다.
 
 ## 현재 판정
 
@@ -10,7 +10,7 @@
 |---|---|---|
 | Web/API Pod | 각각2개, PC1/PC2 분산 배치. 템플릿은 hostname 기준 required anti-affinity | 실행본 복제는 있음. 실제 요청이 양쪽에 도달하는 로그 시험은 별도 |
 | 내부 Service | 현재 API ClusterIP:5000, web ClusterIP/NodePort30080. 앞단 Nginx가 Service 이름으로 전달 | Ready endpoint로 분산하는 구조. 실측50:50이나 세션·업무 전체 성공까지 보장하지 않음 |
-| 공개 HTTPS 진입 | .3.30:443 → .7.185:30443 | PC1에 고정된 NAT 대상. 장애 감지 후 .7.100으로 자동 전환하는 앞단 구성은 확인되지 않음 |
+| 공개 HTTPS 진입 | .3.30:443 → PC3 HAProxy → .7.185/.7.100:30443 | 운영Frontend 누계와readiness200 확인, 기존443 NAT 비활성화. 11443에서 연결분산·수동제외 검증. 자동DOWN·운영443의30회/양노드분산은 추가확인 |
 | 자동화10443 진입 | PC2 → .3.30:10443 → .7.185:30445 | 프록시는 양 노드에 있지만 pfSense의 대상은 PC1 고정. 향후 전환 시 PC2 원본 제한과 SNAT/Local 정책도 유지해야 함 |
 | 기존 관리자9443 | 승인된 PC3 → .7.185:30444 | 별도 경로도 PC1 의존. 공개443의 ADMIN 세션 접근과 구분 |
 | DB | PC1 Windows Primary, PC2 Replica. 앱은 .3.18을 사용 | GTID 복제·백업은 있음. 자동 승격·쓰기 주체 격리·새 대상 선택은 없음 |
@@ -49,7 +49,7 @@
 
 **API Pod1개 종료 시 잔여 실행본 처리와 자동 재생성을 실측 확인**했다. 관측60건에서 실패가 없었던 결과이며 모든 요청·쓰기·세션에 대한 일반적인 무중단 보장은 아니다. 최초 Ready 도달 시각을 연속 측정하지 않았으므로 새Pod의AGE를 복구 소요시간으로 사용하지 않는다. 이번 시험에서는 PC1의VM·k3s Server·Windows Primary DB가 살아 있었다. PC1전체장애·DB승격은 여전히 미실행이다.
 
-다음은 [공개 HTTPS 진입점의 HAProxy 준비](academy-haproxy-public-ingress.md)다. 패키지 설치 여부는 사용자가 아직 확인하지 않았으며 실제 HAProxy 적용 성공으로 기록하지 않는다. 발표 시연 구성은 전체 설정·검증을 마친 뒤 별도로 작성한다.
+후속으로 [공개 HTTPS HAProxy](academy-haproxy-public-ingress.md)를 적용했다. 11443에서30/30 성공·backend세션17/17과 PC1 MAINT 중PC2 30/30처리를 확인했고 양쪽UP으로 복귀했다. 관리GUI는8444로 이동했으며 운영443 Frontend 누계증가·readiness200 및 기존NAT비활성화 화면을 확인했다. 자동DOWN시점·연속요청 결과와 운영443 회귀는 미확인이다. [상세 현장 기록](../operations/2026-10-28-haproxy-public-cutover.md)을 따른다. 발표 시연 구성은 전체 설정·검증을 마친 뒤 별도로 작성한다.
 
 `infrastructure/keepalived/*.conf.example`에는 REPLACE_WITH_VLAN10_INTERFACE와 과거192.168.10.x가 남아 있다. 이 파일이 있다는 이유로 현재 학원망에 VIP 자동 전환이 설치됐다고 판단하지 않는다. `infrastructure/kubernetes/base`도 옛 VLAN/NodePort 예제이며 현재 현장에 전체 apply하지 않는다.
 
@@ -59,9 +59,9 @@
 |---|---|
 | API Pod1개 종료 | 제어부·DB·다른 endpoint가 정상이라면 남은 API로 처리하고 Deployment가 대체Pod를 생성할 수 있음. 일시 실패와 실제 회복 시간 측정 필요 |
 | PC2 Ubuntu VM 장애 | PC1 제어부·DB·진입점은 남음. PC2 실행본은 사라지며 required anti-affinity 때문에 PC1에2개를 강제로 보충하지 않음 |
-| PC1 Ubuntu VM만 장애 | Windows DB는 남을 수 있으나 NAT 대상과 유일한 제어부를 잃음. 현재 공통 URL의 자동 복구를 기대하지 않음 |
+| PC1 Ubuntu VM만 장애 | HAProxy는PC2 NodePort도 대상으로 하지만 유일한제어부를 잃음. stale endpoint·DNS·노드간경로와PC2단독처리를 실측해야 하며 전체복구를 보장하지 않음 |
 | PC1 Windows MySQL만 장애 | API 두 개 모두 같은 DB에 의존해 readiness 실패 가능. PC2 Replica 자동 승격은 없음 |
-| PC1 물리PC 전체 장애 | 제어부·NAT 대상·Primary·일부 관제 동시 중단. PC2에Pod가 남아도 서비스 전체 자동 승계를 뜻하지 않음 |
+| PC1 물리PC 전체 장애 | 제어부·Primary·일부 관제 동시 중단. 공개진입점이PC2를선택해도 DB와제어부가자동승계되지 않음 |
 
 `systemctl stop k3s`만으로 모든 컨테이너가 종료되는 것은 아니므로 물리PC/VM 전체 장애 시험과 같게 취급하지 않는다. killall/uninstall이나 VM 강제종료를 가벼운 점검 명령으로 사용하지 않는다.
 
@@ -129,7 +129,7 @@ sudo k3s kubectl -n telecom logs -l app=telecom-api -c api \
 ## 4. 중단 시험 전에 보완할 순서
 
 1. 위의 상태·양 NodePort·API 분산을 측정한다. 현장 값·시각·성공/실패 수를 기록한다.
-2. PC3에 양 노드를 대상으로 하는 상태 감시형 진입점(예: HAProxy)을 설계하고 별도로 적용한다. 공개443과 내부10443의 원본 Source 제한을 구분한다. TLS, SNAT, 반환 경로, 관리 GUI 포트, 인증 헤더 처리도 검증한다. NAT alias에 IP2개만 넣는 것으로 장애 노드가 자동 제외되지는 않는다.
+2. PC3의양노드HAProxy/운영443 적용은확인했다. 운영443의연속요청·분산·권한회귀와자동장애제외증거를마무리한다. 내부10443/기존9443은고정대상으로남아있으며별도전환범위다. TLS, 반환경로, 관리GUI접근, 인증헤더도검증한다.
 3. 제어부 HA/복구 방침을 먼저 정한다. 현재 VM 추가는 PC1·PC2 안에서만 가능하므로 embedded etcd Server3개를 두 물리PC에 배치해도 양쪽 어느 물리PC의 장애든 견디는 quorum은 만들 수 없다. 독립 장애 영역을 추가하거나 대응 범위를 제한한 복구 계획이 필요하다.
 4. DB는 쓰기 중단→구 Primary의 확실한 격리(fencing)→GTID/지연과 손실 범위 판단→검증된 Replica 승격→안정된 DB 진입점/앱 연결→기능 확인→구 Primary 재가입까지 준비한다. 양쪽 동시 쓰기를 만들지 않는다.
 5. PC2 Primary일 때의 앱 계정, VM→PC2:3306 제한 허용, 백업/Discord 감시 역할 전환을 준비한다. 일반 PC에 DB를 개방하거나 Replica 보호 조건을 삭제하는 방식으로 해결하지 않는다.

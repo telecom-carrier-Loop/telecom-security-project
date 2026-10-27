@@ -1,13 +1,33 @@
-# 공개 HTTPS 진입점 이중화 — HAProxy 단계별 준비
+# 공개 HTTPS 진입점 — HAProxy 적용 현황과 절차
 
-2026-10-27 계획. **아래 HAProxy 구성은 아직 현장 적용하지 않았다.** 사용자 확인 상태는 패키지 설치 여부 미확인이다. 먼저 설치 여부/버전을 확인하고 실제 화면과 맞춰 적용한다.
+2026-10-28 정리. **HAProxy 설치·11443 시험·운영443 전환을 사용자 화면으로 확인했다.** 아래 현재 상태가 우선하며, 이후 번호별 절차는 적용 방법과 복구 참고다. 문서 작성 환경에서 학원 서버에 직접 접속해 검증한 결과는 아니다.
+
+## 확인된 현재 상태
+
+| 항목 | 확인 결과 |
+|---|---|
+| HAProxy | 2.8.3-86e043a, PC3 pfSense에서 실행 |
+| 공통 Backend | telecom-public-nodes, pc1-web 192.168.7.185:30443 / pc2-web 192.168.7.100:30443, 둘 다 Active/UP |
+| 시험 Frontend | telecom-public-test, 192.168.3.30:11443, TCP/TLS 통과 |
+| 운영 Frontend | telecom-public-https, 192.168.3.30:443, TCP/TLS 통과. Sessions Total=1 화면 확인 |
+| 이전 운영 NAT | telecom-service-https(.3.30:443→.7.185:30443)는 비활성화, 삭제하지 않음 |
+| 운영 WAN 허용 | telecom-haproxy-public-443, 원본192.168.3.0/24→192.168.3.30:443 |
+| 관리 GUI | nginx의 IPv4/IPv6 8444 리스닝 확인, LAN 관리 주소 https://192.168.50.1:8444 |
+| Stats | 내부 포트2200 설정 절차 후 표시 성공. 2200 WAN 공개는 불필요 |
+| 11443 시험 | readiness30/30 HTTP200/CurlExit0, 관리자 데이터 표시, 양 backend 세션17/17 |
+| PC1 수동 제외 | pc1-web MAINT 중 누계17 유지, pc2-web 17→47, 요청30/30 성공. 이후 양쪽 UP |
+| 443 시험 | readiness HTTP200/database ok와 운영 Frontend 누계 증가 확인. 전환 후30회·양쪽 분산·역할별 회귀는 미확인 |
+| 자동 DOWN 시험 | 닫힌30446과 Runtime API 포트 변경까지 확인. DOWN 화면·전환 중 연속요청 결과는 미확인 |
+| 시험 후 복구 | 실행 중 pc1-web port/check_port=30443 및11443 readiness200 확인. GUI 저장값도30443인지 유지 확인 필요 |
+
+근거와 한계는 [HAProxy 현장 적용 기록](../operations/2026-10-28-haproxy-public-cutover.md)에 모았다. 후속 [HTTP→HTTPS 자동 이동](academy-http-https-redirect.md)은 아직 적용하지 않았다. 첨부 화면의 서버 Date가10월27일인 항목은 촬영일을10월28일로 재단정하지 않는다.
 
 ## 범위와 전제
 
-- 현재 정상 상태: 공개443 고정NAT→PC1:30443, 양쪽NodePort 직접 HTTPS200, API요청30회 양노드분산, API Pod1개종료 중60회 모두200 및 대체Pod복구.
-- 다음 목표: PC3에서 PC1/PC2의 공개 HTTPS endpoint를 상태 감시하고 새 연결을 정상 노드에 전달한다.
+- 적용 전 기준 상태: 공개443 고정NAT→PC1:30443. 이후 위 현재 상태처럼 HAProxy 운영443으로 전환했다. 양쪽NodePort 직접 HTTPS200, API요청30회 양노드분산, API Pod1개종료 중60회200은 앞선 별도 시험이다.
+- 현재 구성은 PC3에서 양 노드의 TCP 연결 상태를 감시한다. 실제 실패 자동 제외·복귀의 현장 증거는 추가 확보해야 한다.
 - 1단계는 별도 시험포트 `192.168.3.30:11443`을 사용한다. 기존443 NAT를 이 단계에서 변경하지 않는다. 11443은 사용 중인 규칙/listener가 없는지 먼저 확인한다.
-- n8n10443은 내일 담당자와 확인할 별도 경로이며 지금 함께 변경하지 않는다. 기존9443도 별도 검토 전까지 유지한다.
+- n8n10443은 담당자와 확인할 별도 경로이며 이번 전환에 포함하지 않았다. 기존9443도 유지했다.
 - TLS는 기존 k3s edge에서 종료하는 TCP 통과 방식으로 시작한다. 브라우저가 기존.3.30 인증서를 검증하므로 이 단계에 인증서 개인키를 pfSense로 복사할 필요가 없다.
 - 이 진입점만 보완해도 Primary DB/단일제어부 문제는 남는다. PC1전체장애를 자동승계한다고 판정하지 않는다.
 
@@ -21,7 +41,7 @@
 
 ## 2. 준비할 공개용 Backend — 설치 확인 후
 
-실제 GUI 명칭은 패키지 버전에 맞춘다. 아래는 설정할 값이며 적용 완료 기록이 아니다.
+실제 GUI 명칭은 패키지 버전에 맞춘다. 아래는 적용 기준이며 각 항목의 관측 결과는 상단 현재 상태를 따른다.
 
 | 항목 | 값 |
 |---|---|
@@ -67,11 +87,11 @@ curl.exe --noproxy '*' --ssl-revoke-best-effort --connect-timeout 3 --max-time 1
 curl.exe --noproxy '*' --ssl-revoke-best-effort --connect-timeout 3 --max-time 10 -sS -i 'https://192.168.3.30:11443/api/health/ready'
 ```
 
-기대값은 TCP True, edge-health200, readiness200/database ok다. HAProxy 통계에서 두 backend가 UP인지 확인한다. 시험 포트에서는 이 상태 조회만 진행하고 로그인/업무 쓰기 결과를 운영443과 같다고 가정하지 않는다.
+기대값은 TCP True, edge-health200, readiness200/database ok다. HAProxy 통계에서 두 backend가 UP인지 확인한다. 현장에서는11443 관리자 로그인·대시보드 조회도 성공했다. 업무 쓰기 전체 또는 운영443 역할별 회귀까지 성공했다고 확대하지 않는다.
 
 Backend가 DOWN이면 HAProxy의 실제 송신 IP/경로와 NodePort 접근, Service Local/Pod 배치를 확인한다. TCP 통과 모드에서 SSL 재암호화/PROXY protocol이 잘못 켜지면 TLS/HTTP가 깨질 수 있다.
 
-## 5. 운영443 전환은 시험 포트 검증 후 별도 진행
+## 5. 운영443 전환·복구 절차
 
 1. 시험 포트 성공과 현재 설정 백업을 확인한다.
 2. HAProxy 운영 Frontend를 `.3.30:443`용으로 준비한다. 기존 NAT/관리 GUI와 충돌하지 않는지 확인한다.
@@ -79,6 +99,20 @@ Backend가 DOWN이면 HAProxy의 실제 송신 IP/경로와 NodePort 접근, Ser
 4. 전환 전후 같은 주소의 TLS·readiness·고객/ADMIN 로그인·미인증401/CUSTOMER403·공개 internal404를 회귀 확인한다. 기존 TCP 연결은 새 backend로 중간 이동하지 않으며 클라이언트 재연결을 포함해 관측한다.
 5. 오류면 이번 운영 Frontend를 비활성화하고 기존443 NAT/연동 규칙을 복구한다. 필요한 연결 state만 대상별로 정리하며 전체 state 초기화는 하지 않는다.
 6. 양 backend 연결/장애 제외를 측정한 후 VM 중단 시험 범위를 정한다. PC1 전체 중단 전에는 DB와 제어부 보완이 별도로 필요하다.
+
+## 상태 파일로 인해 변경 전 포트가 남았을 때
+
+현장에서 생성된 설정의PC1포트는30446인데 실행 중 포트는30443인 상태를 확인했다. `server-state-file /tmp/haproxy_server_state`와 `load-server-state-from-file global`이 있었고 저장 파일에도30443이 남아 있었다. 재적용 시 이전 서버 포트가 복원된 정황이며 화면값만으로 실행 포트를 판단하지 않는다.
+
+아래 조회는 pfSense Shell에서 실행한다. 서버 번호·이름은 실행 결과를 기준으로 하며 #100/#101을 모든 환경의 고정값으로 사용하지 않는다.
+
+```sh
+printf 'show servers state\n' | nc -N -w 2 -U /tmp/haproxy.socket
+```
+
+당시 backend ID100, PC1 server ID101이었다. 명령에서 `ipvANY`를`ipANY`로 쓰거나 서버번호의`#`을 생략하면 No such backend/server가 발생했다. Runtime API에서 목적지 포트와 검사 포트는 각각 확인해야 한다. 한쪽만30443으로 복구하면 실제 전달은 실패하는데 건강검사만UP일 수 있다.
+
+최종 복구 기준은 **실행 목적지30443, 검사포트30443(또는 서버포트를 따르는0), GUI 저장포트30443, 두서버UP, HTTPS readiness200**이다. Runtime API 변경은 시험용이며 상태파일 삭제·전체서비스 재시작으로 무작정 해결하지 않는다.
 
 ## 근거
 
