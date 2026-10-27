@@ -1,6 +1,94 @@
 # MySQL 접근 제한과 웹 앱 계정 분리
 
-상태: **사전 점검 단계 / 현장 미적용**, 2026-10-27. 관리자 웹 접근을 허용해도 사용자 PC에 MySQL 3306을 개방하지 않는다. [관리자 웹 전환](academy-admin-access.md)과 DB 접근 제한은 별도 단계로 검증한다.
+상태: **현장 점검 결과 확인 / 변경 안내 단계**, 2026-10-27. 사용자 요청에 따라 앱 전용 계정 이름은 `webuser`로 정한다. 계정 생성·앱 전환 완료 출력은 아직 없다. 관리자 웹 접근을 허용해도 사용자 PC에 MySQL 3306을 개방하지 않는다. [관리자 웹 전환](academy-admin-access.md)과 DB 접근 제한은 별도 단계로 검증한다.
+
+## 10월 27일 추가 점검 결과
+
+| 관측 | 판단 |
+|---|---|
+| PC1·PC2 Domain Enabled True, Private/Public False | Private/Public 프로필 방화벽 꺼짐. 현재 NIC 프로필 출력은 미제공이므로 함께 확인 필요 |
+| 일반 PC `.3.21` → `.3.18:3306`, `.3.19:3306` TCP True | 양쪽 DB 포트에 일반 사용자 PC가 도달 가능. DB 인증 성공을 의미하지는 않음 |
+| PC1 Windows 관측 원본 `.7.185`, `.7.100`, `.3.19` | 현재 API·PC2 연결의 허용 대상 후보를 실제 관측. 프로그램·프로필·규칙까지 확인 후 제한 |
+| 두 API USER() `root@172.17.0.1`, CURRENT_USER() `root@%` | 웹 앱에 DB 관리자 계정 사용 중. MySQL은 Docker NAT 뒤의 공통 원본을 인식 |
+| 두 API session `Ssl_cipher` 빈 값 | 시험한 앱 DB 연결은 암호화되지 않음. 웹 HTTPS·복제 TLS와 별개 |
+| 양쪽 `0.0.0.0:3306` 및 `127.0.0.1:3306` listener, PID 다름 | PID/실행 프로그램 추가 확인 대상. 이 목록만으로 MySQL 서버가 두 개라고 단정하지 않음 |
+
+앱 계정 분리는 필요한 개선이지만 DB 포트 노출과 미암호화까지 해결하지는 않는다. 계정 시험 → 앱 연결 전환 → 원본별 방화벽 제한 → DB TLS를 각각 검증한다. 현장 유효 방화벽 규칙 목록이 아직 없어 특정 기존 규칙의 일괄 변경을 안내하지 않는다.
+
+## webuser 생성과 사전 연결 시험
+
+PC1 Windows에서 Primary 관리자 계정으로 접속한다.
+
+```powershell
+docker exec -it flask_mysql mysql --user=root --password
+```
+
+기존 계정 충돌을 확인한다.
+
+```sql
+SELECT User, Host FROM mysql.user WHERE User = 'webuser';
+SELECT @@partial_revokes AS partial_revokes;
+```
+
+기존 webuser가 있으면 이 생성 절차를 중단하고 해당 계정의 용도·권한을 먼저 확인한다. 없으면:
+
+```sql
+CREATE USER 'webuser'@'172.17.0.1' IDENTIFIED BY RANDOM PASSWORD;
+```
+
+생성된 암호는 현장에서 비공개로 보관하고 채팅·Git·스크린샷에 넣지 않는다. MySQL이 실제 인식한 원본 `172.17.0.1`만 허용한다. 이는 Windows 방화벽용 허용 IP가 아니며 Docker 환경 변경 시 다시 확인한다. 일반 사용자도 Docker를 통해 이 원본으로 보일 수 있으므로 계정 HOST 제한이 네트워크 차단을 대체하지 않는다.
+
+`partial_revokes=0`이면 DB 이름의 밑줄 와일드카드를 이스케이프해 다음 권한을 부여한다.
+
+```sql
+GRANT SELECT, INSERT, UPDATE, DELETE
+ON `my\_new\_board\_db`.* TO 'webuser'@'172.17.0.1';
+```
+
+`partial_revokes=1`이면 밑줄이 이미 문자로 처리되므로 위 GRANT 대신 아래를 사용한다. 두 가지를 모두 실행하지 않는다.
+
+```sql
+GRANT SELECT, INSERT, UPDATE, DELETE
+ON `my_new_board_db`.* TO 'webuser'@'172.17.0.1';
+```
+
+확인:
+
+```sql
+SHOW GRANTS FOR 'webuser'@'172.17.0.1';
+exit;
+```
+
+USAGE ON *.*는 별도 관리자 권한 부여가 아니다. 실제 업무 DB CRUD 외 CREATE/DROP/ALTER, GRANT OPTION, 전역 관리 권한이 없어야 한다. 이 단계는 기존 앱 계정을 바꾸지 않는다. 현재 앱이 TLS를 쓰지 않으므로 여기서 REQUIRE SSL이나 전역 require_secure_transport를 먼저 켜지 않는다.
+
+PC1 Ubuntu에서 다음을 실행한다. 각 Pod에서 새 암호를 숨김 입력하고 접속만 시험한다. 기존 API 프로세스·자격증명은 변경하지 않는다.
+
+```bash
+pods="$(sudo k3s kubectl -n telecom get pods -l app=telecom-api -o name)"
+for pod in $pods; do
+  echo "검사: $pod"
+  sudo k3s kubectl -n telecom exec -it "$pod" -c api -- python -c '
+from getpass import getpass
+from pathlib import Path
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
+from wsgi import app
+url = make_url(app.config["SQLALCHEMY_DATABASE_URI"]).set(username="webuser", password=getpass("webuser password: "))
+engine = create_engine(url, pool_pre_ping=True)
+with engine.connect() as conn:
+    print(tuple(conn.execute(text("SELECT CURRENT_USER(), DATABASE(), 1")).one()))
+print("/app/.env exists:", Path("/app/.env").is_file())
+engine.dispose()
+'
+  result=$?
+  if [ "$result" -ne 0 ]; then
+    echo "중단: webuser 접속 시험 실패"
+    break
+  fi
+done
+```
+
+두 Pod에서 `webuser@172.17.0.1`, `my_new_board_db`, `1`이 출력되면 접속 시험 성공이다. 암호 오입력으로 예외가 나오면 예외에 연결 URL/암호가 없는지 확인 후 공유한다. `/app/.env`가 존재하면 현재 소스가 환경변수를 덮어쓸 수 있으므로 파일 공급 위치를 먼저 확인한다. 존재하지 않으면 API 전용 Secret과 DB_USER/DB_PASSWORD 명시적 secretKeyRef를 사용하는 다음 전환 절차를 준비할 수 있다. 기존 공유 Secret을 무조건 수정하지 않는다.
 
 ## 확인된 설계와 주의점
 
@@ -111,7 +199,7 @@ docker exec -it flask_mysql mysql --user=root --password
 
 ```sql
 SELECT User, Host, account_locked FROM mysql.user
-WHERE User IN ('root','loop_app','loop_web_runtime','loop_repl','loop_backup');
+WHERE User IN ('root','loop_app','webuser','loop_repl','loop_backup');
 SELECT USER, HOST, COMMAND FROM information_schema.PROCESSLIST
 WHERE USER NOT IN ('event_scheduler','system user');
 ```
@@ -137,7 +225,7 @@ Test-NetConnection 192.168.3.19 -Port 3306
 2. PC1 DB에는 실제 관측된 API·Replica·승인된 DB 운영 출발지만 허용하도록 설계한다. `.7.185/.7.100/.3.19`는 후보일 뿐 NAT 후 실제 관측으로 확정한다. 승인 관리 PC라는 이유로 PC1~3 모두에 무조건 3306을 허용하지 않는다.
 3. 기본 인바운드 차단과 좁은 허용 규칙을 조합하고 기존 광범위 DB/프로그램 허용을 정리한다. **명시적인 3306 전체 Block 뒤에 Allow를 추가하는 방식은 쓰지 않는다.** Windows는 일반적으로 명시적 Block이 Allow보다 우선한다. 공유 Docker 규칙을 줄여야 한다면 다른 서비스에 필요한 허용을 먼저 준비한다. 정책이 GPO로 관리되면 로컬 규칙으로 해결됐다고 가정하지 않는다.
 4. 한 PC씩 적용하고 즉시 두 API readiness, Replica IO/SQL Yes, 고객 조회, 관리자 조회, 백업 시험을 확인한다. 문제가 생기면 새로 만든 규칙과 수정한 기존 규칙만 복원한다. 방화벽 전체 비활성화를 복구 방법으로 사용하지 않는다.
-5. 앱 전용 새 계정(예: 아직 존재하지 않는 `loop_web_runtime`)을 관측된 DB host 범위에 만든다. 업무 DB의 SELECT/INSERT/UPDATE/DELETE부터 부여하고 필요한 추가 권한은 실제 사용으로 검증한다. CREATE/DROP/ALTER, GRANT OPTION, CREATE USER, FILE, 전역 관리 권한은 런타임 계정에 주지 않는다. schema migration은 별도 운영 계정으로 수행한다.
+5. 앱 전용 새 계정 `webuser`를 위 절차로 관측된 DB host 범위에 만든다. 업무 DB의 SELECT/INSERT/UPDATE/DELETE부터 부여하고 필요한 추가 권한은 실제 사용으로 검증한다. CREATE/DROP/ALTER, GRANT OPTION, CREATE USER, FILE, 전역 관리 권한은 런타임 계정에 주지 않는다. schema migration은 별도 운영 계정으로 수행한다.
 6. 계정 암호는 현장에서 생성·입력하고 Git·명령행 인수·채팅·공개 로그에 넣지 않는다. 기존 root·loop_repl·loop_backup·loop_app 암호를 변경하지 않는다. Primary의 계정 생성이 필터된 Replica에 자동 복제된다고 가정하지 않고 장애 전환용 계정 준비를 별도로 확인한다.
 7. 실제 Deployment의 DB_USER/DB_PASSWORD 공급 위치를 확인한다. Secret 일부 키만 바꾸더라도 같은 Secret을 사용하는 migration Job 등에 영향이 있을 수 있다. 앱 전용 Secret으로 분리하는 안을 우선 검토한다. 환경변수보다 `/app/.env`가 우선하는 소스가 있으므로 배포된 이미지에서 실제 연결 계정이 바뀌었는지 다시 조회한다. Secret 값을 화면에 출력하지 않는다.
 8. 기존 자격증명 참조를 비공개로 보존하고 API를 순차 재시작한다. 두 Pod CURRENT_USER가 새 계정인지, 읽기·쓰기·세션·관리자 작업이 정상인지 확인한다. 실패 시 API의 기존 자격증명 참조를 복원하고 재시작한다. 기존 root 계정 제거는 별도 검토 후 수행한다.
