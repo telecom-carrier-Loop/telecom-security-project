@@ -16,11 +16,15 @@
 | 도구 상태 | applied-needs-pfsense-n8n-tests. 도구가 외부 연동 성공을 자동 판정하는 완료 상태가 아님 |
 | PC2 → 서비스10443 | 사용자가 TcpTestSucceeded True 보고 |
 | PC2 → POST10443/api/internal/incident-events | HTTP401, JSON UNAUTHORIZED. Authorization/X-API-Key 없이 API에 도달하여 거부됨. 응답 Date 2026-10-27 10:28:43 GMT(19:28:43 KST) |
-| 공개443 내부 API | 404 화면은 관측됐으나 curl 명령 두 개가 붙어 실행돼 Could not resolve host: curl.exe도 발생함. 정확한 단일 URL 시험은 아래 명령으로 재확인 필요 |
+| 공개443 내부 API | 처음에는 명령 중복 붙여넣기 오류가 있었으나, 후속으로 안내한 단독 readiness200 및 내부 API404 시험이 모두 기대값과 같았다고 사용자 보고 |
+| 공개443 readiness | 위 후속 시험에서 HTTP200 / database ok 기대값 일치 사용자 보고. 별도 원문 출력은 미첨부 |
+| 브라우저 →10443/incident-events | GET으로 접근해 Nginx405 화면 확인. 이 경로는 POST 전용이므로 정상 메서드 제한이며 추가 개방 사유가 아님 |
 | 일반 PC →10443 | 10월28일 확인 예정. PC2만 허용됨을 아직 입증하지 못했으므로 완료 표시하지 않음 |
 | n8n 컨테이너 →10443 | CA 신뢰·URL·토큰·본문·실제 이벤트 처리 모두 미확인. Windows curl 성공과 구분 |
 
 401은 비밀번호 오류나 DB 장애를 뜻하지 않는다. 이번 요청은 토큰을 보내지 않았으므로 정상 거부다. 유효 토큰으로 처리·DB 저장·Discord 전송까지 성공했다는 의미는 아니다.
+
+브라우저405, 토큰 없는POST401, 유효 토큰·유효 본문의 최초POST201은 서로 다른 검사다. 브라우저에서405가 보인다는 이유로 GET이나 내부 경로 전체를 허용하지 않는다. 현재 전용 입구는 역할표의 정확한5개 경로·메서드만 전달하며 `/api/internal/*` 모든 경로를 일괄 개방하지 않는다.
 
 ## 의도한 연결 정책과 인계 값
 
@@ -121,9 +125,11 @@ Test-NetConnection 192.168.3.19 -Port 3306
 
 - 관련 구현: [PR #42](https://github.com/telecom-carrier-Loop/telecom-security-project/pull/42). 머지됐으나 실제 운영 완료 판정과 구분한다.
 - 공유 이슈: [Issue #40](https://github.com/telecom-carrier-Loop/telecom-security-project/issues/40). 미확인 항목이 있으므로 진행 중으로 유지한다.
+- 이중화는 [현황·단계별 시험](../runbooks/academy-ha-assessment.md)을 참조한다. 프록시2개 배포가 PC1 전체 장애의 자동 승계를 의미하지 않는다.
 - [x] k3s Plan/Apply 및 Pod2개 Ready 화면 확인.
 - [x] PC2 Windows TCP10443 성공·POST incident-events 미인증401 확인.
-- [ ] 공개443의 정확한 단독 URL404 재확인.
+- [x] 공개443의 정확한 단독 URL404 및 readiness200 기대값 일치 사용자 보고.
+- [x] 브라우저의 POST 전용 incident-events GET405 화면 확인.
 - [ ] PC2 Windows에서 내부 API5개 미인증401 및 기존 웹 회귀 확인.
 - [ ] 일반 PC10443 차단 및 DB 포트 차단 재확인.
 - [ ] pfSense 최종 설정 백업 및 Service Local 추가 증거 보관.
