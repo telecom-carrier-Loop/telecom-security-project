@@ -34,6 +34,23 @@
 
 서버 로그 시각은 2026-10-27 12:22 UTC대(21:22 KST대)다. 화면의 요청 번호를 합하면1~30이며 양쪽 API가40%/60%로 처리했다. 이 비율은 이번 작은 표본의 결과이지 고정 분배율이 아니다. **정상 상태의 API Service 분산은 실측 확인**했으며, 정적 Web/외부 edge의 균등 분산·PC1중단·DB승격·서비스 전체HA는 아직 시험하지 않았다.
 
+## 10월27일 API Pod1개 재생성 시험 확인 결과
+
+후속 사용자 화면에서 아래 항목을 확인했다. 문서 환경에서 직접 중단한 결과가 아니다.
+
+| 항목 | 결과 |
+|---|---|
+| 시험 ID | podfail-20261027-213257 |
+| 중단 대상/시각 | PC1 API telecom-api-8cc569478-xdmvl 삭제, 2026-10-27 21:33:52 KST 화면 |
+| 관측 요청 | 60건 모두HTTP200/CurlExit0, 실패0건 |
+| 남은 PC2 API | telecom-api-8cc569478-x7k5x, 10.42.1.32, Running 유지. 중단 시각 이후에도 같은 시험ID의200 로그 확인 |
+| PC1 대체 API | 새 이름의API가10.42.0.59에서1/1 Running으로 복구 |
+| 최종 API endpoint | 10.42.1.32와10.42.0.59 두 주소로 갱신 |
+
+**API Pod1개 종료 시 잔여 실행본 처리와 자동 재생성을 실측 확인**했다. 관측60건에서 실패가 없었던 결과이며 모든 요청·쓰기·세션에 대한 일반적인 무중단 보장은 아니다. 최초 Ready 도달 시각을 연속 측정하지 않았으므로 새Pod의AGE를 복구 소요시간으로 사용하지 않는다. 이번 시험에서는 PC1의VM·k3s Server·Windows Primary DB가 살아 있었다. PC1전체장애·DB승격은 여전히 미실행이다.
+
+다음은 [공개 HTTPS 진입점의 HAProxy 준비](academy-haproxy-public-ingress.md)다. 패키지 설치 여부는 사용자가 아직 확인하지 않았으며 실제 HAProxy 적용 성공으로 기록하지 않는다. 발표 시연 구성은 전체 설정·검증을 마친 뒤 별도로 작성한다.
+
 `infrastructure/keepalived/*.conf.example`에는 REPLACE_WITH_VLAN10_INTERFACE와 과거192.168.10.x가 남아 있다. 이 파일이 있다는 이유로 현재 학원망에 VIP 자동 전환이 설치됐다고 판단하지 않는다. `infrastructure/kubernetes/base`도 옛 VLAN/NodePort 예제이며 현재 현장에 전체 apply하지 않는다.
 
 ## 장애 범위별 예상
@@ -120,7 +137,7 @@ sudo k3s kubectl -n telecom logs -l app=telecom-api -c api \
 
 시험 기록: 장애 범위, 시작/복구 시각, HTTP 실패 수, 남은 Pod와 endpoint, 같은 URL의 접속 지속 여부, DB 쓰기 대상의 단일성, 데이터 차이, 로그인·읽기·합의된 쓰기, 감시 알림, 복구 후 역할/복제 상태. 기존 로그인 유지도 쿠키/DB 세션 의존성을 포함해 확인한다.
 
-## 다음 작은 단계: PC1 API Pod1개 재생성 시험 — 아직 미실행
+## PC1 API Pod1개 재생성 시험 절차 — 후속 화면에서1회 수행 확인
 
 이 시험은 PC1의 API 컨테이너 실행본 하나만 종료하고 Deployment의 대체 실행본 생성을 관찰한다. PC1 Windows DB, Ubuntu VM, k3s 제어부와 edge는 유지한다. 전체서버 장애나 DB승격 시연으로 표시하지 않는다. 두 API가1/1이고 최근 readiness가 정상일 때 진행한다. 실제 종료 시점에 일시적인 HTTP 실패가 있으면 숨기지 않고 기록한다.
 
