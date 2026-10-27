@@ -1,6 +1,6 @@
 # 현장 보고서에 따른 MySQL 3306 접근 제한
 
-2026-10-27. **도구·시험 준비 완료 / 현장 적용 전**. [계정 분리·네트워크 점검](mysql-network-access-hardening.md)의 후속이다. 현재 사용자 보고에서 두 API의 실제 계정 `webuser@172.17.0.1`과 공개 HTTPS readiness 200을 확인했다. 방화벽은 별도 적용 단계다.
+2026-10-27. **PC1 재시도 후 연결·HTTPS 정상 사용자 보고 / PC2 적용 대기**. [계정 분리·네트워크 점검](mysql-network-access-hardening.md)의 후속이다. 두 API의 실제 계정 `webuser@172.17.0.1`과 공개 HTTPS readiness 200을 확인했다. 변경 후 관제 전체 회귀와 PC2는 [공유 이슈 #40](https://github.com/telecom-carrier-Loop/telecom-security-project/issues/40)에서 추적한다.
 
 ## 보고서에서 확인한 값
 
@@ -163,6 +163,6 @@ powershell -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -File "$loopFirewall
 - PowerShell 문법 및 모의 방화벽 시험으로 Plan 무변경, 잘못된 호스트·프로필·listener·규칙 변경 거부, PC1 원본 보존, PC2 로컬 제한, 관제 허용 준비, 부분 실패 복구를 검사했다.
 - 초기 모의 시험은 실제 API의 IPv6 loopback 거부와 GpoBoolean 바인딩 차이를 잡지 못했다. 수정 회귀 시험은 이 두 조건을 거부하는 모의 cmdlet과 중단된 이전 state의 복구→새 디렉터리 재시도를 포함한다. 실제 NetSecurity Enabled 매개변수 타입에 대한 문자열 변환도 읽기 전용으로 확인한다.
 - 모의 시험은 실제 방화벽을 바꾸지 않았다. 현장 네트워크·Docker Desktop·GPO 효과는 위 외부 연결 시험으로 확인해야 한다.
-- Public 활성화·일반 PC DB 차단·웹/복제/백업/관제·재부팅 검증의 실제 결과는 아직 없다.
+- PC1 수정본 재시도 후 연결·HTTPS 시험 정상 사용자 보고가 있다. 개별 Status·TCP 결과 증거 보강, 두 API 새 연결과 관제 회귀, PC2 적용·전체 검증·재부팅 검증은 남아 있다.
 
 근거: [Microsoft 방화벽 규칙](https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/rules), [Docker Desktop 포트 게시와 방화벽](https://docs.docker.com/desktop/features/networking/).
