@@ -11,6 +11,7 @@
 
 ## 최신 현장 기록
 
+- [2026-10-27 자동화 API 입구 배포·PC2 미인증401 확인 및 n8n 담당자 인계](operations/2026-10-27-automation-ingress-handoff.md)
 - [2026-10-27 DB 보안 후속 인계: webuser·PC1 적용 보고·PC2 및 파트별 검증](operations/2026-10-27-db-security-handoff.md)
 - [2026-10-27 웹·DB 복제·백업 복구와 프론트엔드 재배포](operations/2026-10-27-service-recovery.md)
 - [학원망 공통 HTTPS 주소의 ADMIN 권한 기반 접근 전환 도구·절차 — 현장 적용 전](runbooks/academy-admin-access.md)

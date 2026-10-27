@@ -1,6 +1,6 @@
 # 학원망 n8n 내부 API 전용 HTTPS 연결
 
-2026-10-27 준비안. **실제 랩 적용·pfSense 변경·n8n 호출 성공은 아직 확인하지 않았다.**
+2026-10-27 현장 후속: **신규 k3s 프록시 배포와 PC2 Windows의 10443 미인증 API401을 확인했다. n8n 연결·유효 토큰 처리·일반 PC 차단은 미검증이며 담당자와 10월28일 진행한다.** 실제 확인 범위와 남은 시험은 [현장 결과·인계 기록](../operations/2026-10-27-automation-ingress-handoff.md)을 우선 참조한다. 아래는 전체 적용 절차이며 이미 완료한 plan/apply를 반복할 필요는 없다.
 자동화 담당자는 PC2 Windows Docker의 n8n(송신 주소 `192.168.3.19`)이며 전용 10443 사용에 동의했다.
 
 ## 경로와 적용 범위
@@ -70,8 +70,8 @@ sudo k3s kubectl -n telecom get pods -l app=telecom-automation-edge -o wide
 | 항목 | 값 |
 |---|---|
 | Interface / Address Family / Protocol | WAN / IPv4 / TCP |
-| Source | Single host or alias → `192.168.3.19` (`/32`), Source Port Any |
-| Destination | Single host or alias → `192.168.3.30` |
+| Source | Address or Alias → `192.168.3.19` (단일 호스트), Source Port Any |
+| Destination | Address or Alias → `192.168.3.30` |
 | Destination Port Range | Other → From `10443`, To `10443` |
 | Redirect target IP | `192.168.7.185` |
 | Redirect target port | Other → `30445` |
@@ -107,6 +107,8 @@ curl.exe --noproxy "*" --ssl-revoke-best-effort --connect-timeout 3 --max-time 1
 Windows curl의 CA 신뢰와 n8n Node.js의 CA 신뢰는 별개다. curl이 인증서 오류 60이면 이전에 검증한 **공개 `lab-ca.crt`**의 지문을 대조하고 Windows 현재 사용자 Root에 등록한다. 개인키는 복사하지 않는다. `-k`로 성공 기준을 대체하지 않는다.
 
 ## 5. PC2 n8n — 컨테이너 CA와 HTTP Request 노드
+
+**현재 인계 대기:** 아래 n8n 확인·변경은 10월28일 담당자와 함께 진행한다. 오늘 적용 완료 항목에 포함하지 않는다.
 
 먼저 컨테이너 이름과 실제 Compose 파일 위치를 확인한다(이 명령은 토큰 환경변수를 출력하지 않는다).
 
