@@ -71,6 +71,10 @@
 
 ## 남은 작업
 
+- 후속 화면에서 두 API의 실제 DB 계정 `webuser@172.17.0.1`, 두 Pod 1/1 및 rollout 완료를 확인했다. CRUD 전용 계정으로 전환했으며 앱의 쓰기 업무 전체·최신 백업 시험 결과는 별도 확인 대상이다.
+- PC1 Windows에도 CA를 등록한 뒤 공개 HTTPS readiness 200 / database ok를 확인했다. 계정 전환 후 Windows의 UNTRUSTED_ROOT 오류는 DB 인증 실패와 구분해 해결했다.
+- PC1·PC2 방화벽 보고서에서 Public 이더넷, Public/Private 비활성, Docker TCP Any 허용과 일반 PC의 DB TCP 도달을 확인했다. [보고서 기반 적용 도구](../runbooks/mysql-firewall-scope.md)는 준비됐으나 현장 적용·차단·관제 회귀 결과는 아직 없다.
+
 - [ ] 공개 주소에서 익명 401 / CUSTOMER 403 / ADMIN 200을 검증한 뒤 관리자 접근 정책 전환 완료 표시.
 - [ ] 다른 학원 사용자 PC의 CA 신뢰·로그인·관리자 권한 회수 후 재접근 확인.
 - [ ] SNAT·NodePort로 원본 IP가 합쳐지는지 로그 확인; 공통 IP 차단·로그인 제한의 전체 사용자 영향 검증.

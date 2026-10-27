@@ -4,6 +4,8 @@
 
 ## 10월 27일 추가 점검 결과
 
+후속 보고서에서 양쪽 이더넷 Public, Docker TCP Any 허용 규칙과 게시 서비스를 확인했다. [실행 도구·순차 적용 절차](mysql-firewall-scope.md)를 추가했다. 두 API의 webuser 운영 전환과 공개 readiness 200은 사용자 화면으로 확인했으며 방화벽 적용 결과는 아직 없다.
+
 | 관측 | 판단 |
 |---|---|
 | PC1·PC2 Domain Enabled True, Private/Public False | Private/Public 프로필 방화벽 꺼짐. 현재 NIC 프로필 출력은 미제공이므로 함께 확인 필요 |
