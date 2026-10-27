@@ -1,8 +1,8 @@
 # 인시던트 — A / D, C 검증
 
-자동 수신: POST /api/internal/incident-events, 전용 INCIDENT_API_TOKEN 사용. 관리자 세션을 재사용하지 않고 관리자 API 권한도 부여하지 않습니다. 공개·관리 Nginx는 이 경로를 외부에 노출하지 않습니다.
+자동 수신: POST /api/internal/incident-events, 전용 INCIDENT_API_TOKEN 사용. 관리자 세션을 재사용하지 않고 관리자 API 권한도 부여하지 않습니다. 공개·관리 Nginx는 이 경로를 외부에 노출하지 않습니다. 학원망 k3s의 PC2 n8n 전용 HTTPS(10443) 준비·적용·검증은 [자동화 입구 절차](../runbooks/academy-automation-ingress.md)를 따릅니다. 실제 랩 연결 완료 전까지 준비 상태로 기록합니다.
 
-수동 업무: /api/admin/incidents/*, SECURITY_ADMIN만 조회·생성·배정·상태·이력 관리.
+수동 업무: /api/admin/incidents/*, 현재 구현의 ADMIN 세션으로 조회·생성·배정·상태·이력 관리. 변경 요청은 CSRF를 검사합니다.
 
 표준 이벤트는 [event-schema](observability/event-schema.md)를 따릅니다. DB 고유 제약은 (source,event_id), 정규화 본문 해시는 수신 시각·수집기·재시도 횟수를 제외합니다.
 
