@@ -12,6 +12,7 @@
 ## 최신 현장 기록
 
 - [2026-10-27 이중화 현황: 요청 분산 확인과 PC1 전체 장애 대응의 미완성 항목](runbooks/academy-ha-assessment.md)
+- [공개 HTTPS 진입점 HAProxy 준비: 설치 확인·별도 시험 포트·운영 전환 계획 — 미적용](runbooks/academy-haproxy-public-ingress.md)
 - [2026-10-27 자동화 API 입구 배포·PC2 미인증401 확인 및 n8n 담당자 인계](operations/2026-10-27-automation-ingress-handoff.md)
 - [2026-10-27 DB 보안 후속 인계: webuser·PC1 적용 보고·PC2 및 파트별 검증](operations/2026-10-27-db-security-handoff.md)
 - [2026-10-27 웹·DB 복제·백업 복구와 프론트엔드 재배포](operations/2026-10-27-service-recovery.md)
