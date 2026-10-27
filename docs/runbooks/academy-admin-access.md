@@ -12,6 +12,8 @@
 
 ## 1. 저장소 코드 검토와 현장 사전 검사
 
+사용자 요청에 따라 [DB 네트워크 접근 제한·앱 계정 분리](mysql-network-access-hardening.md)를 별도로 진행한다. 관리자 웹 허용을 위해 3306을 사용자에게 개방하지 않는다. DB 변경과 공개 관리자 전환은 각각 검증하며 한 번에 적용하지 않는다.
+
 기준 소스 `69fff4c`의 `backend/app` AST 검사에서 `/api/admin` 아래 route 선언 42개에 모두 `@roles_required(ROLE_ADMIN)`이 있었다. `core/permissions.py`는 미로그인 401, 역할 불일치 403, 변경 요청 CSRF 검사를 수행한다. `core/sessions.py`는 매 요청 DB 세션과 사용자 활성·잠금 상태를 확인한다. `frontend/src/components/common/RequireAuth.tsx`는 화면 진입 제어를 담당한다.
 
 정적 검사이며 현장 실행 이미지와 같다고 단정할 수 없다. 로컬 Python에는 Flask/pytest 의존성이 없어 테스트 스위트는 실행하지 않았다. 기존 PC3 9443에서 CUSTOMER 거부·ADMIN 성공을 먼저 확인하고 아래로 **실행 중인 두 API 이미지**를 검사한다.
