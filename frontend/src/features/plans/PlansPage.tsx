@@ -41,6 +41,7 @@ export default function PlansPage() {
   return (
     <section className="page">
       <h1 className="page__title">요금제</h1>
+      <p className="page__lead muted">데이터는 얼마나, 요금은 얼마로? 내 생활에 맞는 요금제를 비교해 보세요.</p>
       {result && <div className={`notice ${result.type === 'ok' ? 'notice--ok' : 'notice--warn'}`} role="status">{result.text}</div>}
       {result?.type === 'ok' && <p className="muted"><Link to="/usage">내 이용현황에서 확인하기</Link></p>}
 

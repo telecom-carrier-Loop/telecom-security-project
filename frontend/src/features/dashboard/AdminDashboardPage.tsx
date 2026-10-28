@@ -27,8 +27,7 @@ export default function AdminDashboardPage() {
 
   return (
     <section className="page">
-      <h1 className="page__title">운영 대시보드</h1>
-      <p className="muted page__lead">{user?.name} · 화면 조회 시각 {dateTime(new Date().toISOString())}</p>
+      <div className="page__header"><div><h1 className="page__title">운영 대시보드</h1><p className="muted">{user?.name} · 화면 조회 시각 {dateTime(new Date().toISOString())}</p></div><button type="button" className="btn btn--ghost" onClick={reload}>현황 새로고침</button></div>
 
       <div className="attention-strip" aria-label="우선 확인할 상태">
         <Link to="/admin/incidents" className={incidents.by_severity.critical + incidents.by_severity.high > 0 ? 'attention-item attention-item--danger' : 'attention-item'}><span>긴급·높음 인시던트</span><strong>{incidents.by_severity.critical + incidents.by_severity.high}건</strong><span>인시던트 확인 →</span></Link>

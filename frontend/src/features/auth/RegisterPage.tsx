@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
-import Logo from '../../components/common/Logo'
+import AuthFrame from '../../components/layout/AuthFrame'
 import { Link, useNavigate } from 'react-router-dom'
 import { ApiError, api } from '../../services/apiClient'
 
@@ -26,10 +26,10 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="auth">
+    <AuthFrame>
       <form className="auth__card" onSubmit={onSubmit} noValidate>
-        <div className="brand"><Logo size="lg" /></div>
         <h1>회원가입</h1>
+        <p className="auth__tagline">루프와 함께할 계정을 만들어 주세요.</p>
         {([['name', '이름', 'text', 'name'], ['email', '이메일', 'email', 'username'],
           ['password', '비밀번호 (영문+숫자 8자 이상)', 'password', 'new-password']] as [Field, string, string, string][]).map(([k, label, type, ac]) => (
           <label key={k}>{label}
@@ -41,6 +41,6 @@ export default function RegisterPage() {
         <button className="btn">가입하기</button>
         <p className="muted">이미 계정이 있나요? <Link to="/login">로그인</Link></p>
       </form>
-    </div>
+    </AuthFrame>
   )
 }
