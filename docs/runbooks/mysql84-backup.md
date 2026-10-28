@@ -8,6 +8,8 @@
 
 ## 1. 백업 준비
 
+2026-10-28 후속: 기본Replica모드는유지하며 명시적Primary모드와 덤프없는역할사전검사를추가했다. [PC2 승격 후 백업 준비](mysql84-primary-backup.md)를따른다. 기존예약/Discord가Primary로자동전환되는것은아니며 실제승격은아직진행하지않는다.
+
 - Docker Desktop, PC1·PC2 MySQL과 복제는 실행 상태로 유지한다. 기존 컨테이너를 수동 종료하지 않는다.
 - 백업 중에는 PC1의 테이블 생성·변경·삭제·이름 변경·TRUNCATE와 스키마 마이그레이션을 잠시 중지한다. InnoDB 일반 데이터 쓰기는 단일 트랜잭션 스냅샷과 병행할 수 있다.
 - MySQL 콘솔에서는 `exit;`로 나온 뒤 PC2 PowerShell에서 실행한다. 현재 PC2 root 비밀번호가 필요하다.
