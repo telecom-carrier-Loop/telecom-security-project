@@ -1,6 +1,6 @@
 # PC2 승격 후 백업 모드 준비
 
-2026-10-28. **PC2는 현재 Replica다. 이 기능은 승격이나 앱 연결 변경을 수행하지 않는다.** 현장에서Replica 사전검사25테이블PASS와Primary 검사 BACKUP_PRIMARY_NOT_READY/종료1을확인했다. Primary 백업의 실제 실행·복원은미검증이며 [예약·Discord 비활성 준비 절차](mysql84-primary-schedule.md)를추가했다. 실제현장등록·전송·활성화는아직미확인이다.
+2026-10-28 마감 갱신: **PC2 Primary 전환 및 API 연결, Primary 백업·25개 테이블 격리 복원·실제 예약 실행을 확인했다.** [현장 인계](../operations/2026-10-28-pc2-primary-handoff.md)에 최종 결과와 역방향 복제 후속 작업을 기록했다. 이 도구 자체는 승격이나 앱 연결 변경을 수행하지 않는다. 아래 Replica 전제와 Primary 거절 시험은 승격 전 준비 당시의 기록이다. [예약·Discord 절차](mysql84-primary-schedule.md)를 함께 확인한다.
 
 ## 확인된 현장 전제
 

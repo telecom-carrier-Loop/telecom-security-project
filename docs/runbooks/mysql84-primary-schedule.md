@@ -1,8 +1,8 @@
 # PC2 Primary 예약 백업·Discord 감시 비활성 준비
 
-2026-10-28 작성. **현재 PC2는 Replica다. 이 절차는 승격하거나 기존 예약을 끄지 않는다.** 코드와 모의시험을 준비했으며 아래 현장 등록·시험 전송은 아직 미확인이다.
+2026-10-28 마감 갱신: **현재 PC2는 Primary다. Primary 예약 백업과 Discord 감시는 Ready, 기존 Replica용 두 예약은 Disabled를 확인했다.** 실제 예약 백업·격리 복원·Discord 시험 전송 결과는 [현장 인계](../operations/2026-10-28-pc2-primary-handoff.md)를 우선 확인한다. 아래 비활성 준비 및 승격 전 사전검사는 준비 당시의 절차이며, 활성화된 환경에서 처음부터 반복 적용하지 않는다.
 
-현재 확인: Replica 사전검사 25테이블 PASS, Primary 검사 BACKUP_PRIMARY_NOT_READY/종료 1. 기존 1시간 백업과 5분 Discord 감시는 Ready다. 새 작업은 다른 이름·경로로 Disabled 등록한다. Primary 실제 백업·복원과 예약 실행을 검증하기 전에 정상 감시로 표시하지 않는다.
+준비 당시 확인: Replica 사전검사 25테이블 PASS, Primary 검사 BACKUP_PRIMARY_NOT_READY/종료 1. 새 작업은 다른 이름·경로로 Disabled 등록한 뒤 승격과 백업 검증 후 활성화했다. Primary 실제 백업·복원과 예약 실행을 검증하기 전에 정상 감시로 표시하지 않는다.
 
 ## 1. 새 도구를 별도 폴더에 받기 — PC2의 기존 Windows 사용자
 
