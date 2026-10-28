@@ -30,29 +30,38 @@ export default function AdminLayout() {
   const { pathname } = useLocation()
   const tools = useApi<{ links: MonitoringLink[] }>('/admin/monitoring-links')
   const onLogout = async () => { await logout(); navigate('/login') }
-  const inSecurity = SECURITY_MENU.some(([to]) => pathname.startsWith(to))
+  const currentPage = [...SERVICE_MENU, ...SECURITY_MENU].find(([to]) => pathname.startsWith(to))?.[1] ?? '운영 대시보드'
 
   return (
     <div className="shell shell--admin">
-      <header className="topnav">
-        <Link to="/admin" className="topnav__brand brand" aria-label="운영 대시보드로"><Logo suffix="운영" /></Link>
-        <nav className="topnav__menu" aria-label="관리자 메뉴">
+      <a className="skip-link" href="#content">본문으로 이동</a>
+      <aside className="admin-sidebar" aria-label="운영 탐색">
+        <Link to="/admin" className="brand" aria-label="운영 대시보드로"><Logo suffix="운영" /></Link>
+        <nav aria-label="관리자 메뉴">
+          <NavLink to="/admin" end className="nav__link">운영 대시보드</NavLink>
+          <h2>고객 업무</h2>
           {SERVICE_MENU.map(([to, label]) => <NavLink key={to} to={to} className="nav__link">{label}</NavLink>)}
-          <Dropdown label="보안" align="left" className={`nav__drop ${inSecurity ? 'nav__drop--active' : ''}`}>
-            {(close) => SECURITY_MENU.map(([to, label]) => (
-              <li key={to}><Link to={to} onClick={close} aria-current={pathname.startsWith(to) ? 'page' : undefined}>{label}</Link></li>
-            ))}
-          </Dropdown>
-          <Dropdown label="관제 도구" align="left" className="nav__drop">
-            {(close) => (tools.data?.links ?? []).map((l) => (
-              <li key={l.key}>
-                {l.url
-                  ? <a href={l.url} target="_blank" rel="noopener noreferrer" onClick={close}>{l.name} <span aria-hidden="true">↗</span></a>
-                  : <span className="user-menu__meta">{l.name} (주소 미설정)</span>}
-              </li>
-            ))}
-          </Dropdown>
+          <h2>보안 관리</h2>
+          {SECURITY_MENU.map(([to, label]) => <NavLink key={to} to={to} className="nav__link">{label}</NavLink>)}
+          <h2>관제 도구</h2>
+          {(tools.data?.links ?? []).map(l => l.url
+            ? <a key={l.key} className="nav__link nav__external" href={l.url} target="_blank" rel="noopener noreferrer">{l.name}<span aria-hidden="true">↗</span></a>
+            : <span key={l.key} className="admin-sidebar__unavailable">{l.name} · 미설정</span>)}
+          {tools.error && <span className="admin-sidebar__unavailable">도구 목록 조회 실패</span>}
         </nav>
+      </aside>
+      <header className="topnav">
+        <span className="admin-location">루프 운영 / <strong>{currentPage}</strong></span>
+        <Dropdown label="전체 메뉴" align="left" className="admin-mobile-menu">
+          {close => <>
+            {[['/admin', '운영 대시보드'], ...SERVICE_MENU, ...SECURITY_MENU].map(([to, label]) => <li key={to}><Link to={to} onClick={close}>{label}</Link></li>)}
+            <li className="user-menu__sep" role="separator" />
+            {(tools.data?.links ?? []).map(l => <li key={l.key}>{l.url
+              ? <a href={l.url} target="_blank" rel="noopener noreferrer" onClick={close}>{l.name} ↗</a>
+              : <span className="user-menu__meta">{l.name} · 미설정</span>}</li>)}
+            {tools.error && <li className="user-menu__meta">관제 도구 목록 조회 실패</li>}
+          </>}
+        </Dropdown>
         <div className="topnav__actions">
           <ThemeToggle />
           <Dropdown label={`${user?.name ?? ''}님`} className="topnav__user">

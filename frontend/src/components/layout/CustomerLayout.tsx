@@ -21,6 +21,7 @@ export default function CustomerLayout() {
 
   return (
     <div className="shell">
+      <a className="skip-link" href="#content">본문으로 이동</a>
       <header className="topnav">
         <Link to="/" className="topnav__brand brand" aria-label="L∞P 홈으로"><Logo /></Link>
         <nav className="topnav__menu" aria-label="고객 메뉴">
@@ -28,6 +29,9 @@ export default function CustomerLayout() {
           {isAdmin && <NavLink to="/admin" className="nav__link">관리자 화면</NavLink>}
         </nav>
         <div className="topnav__actions">
+          <Dropdown label="메뉴" align="right" className="customer-mobile-menu">
+            {close => <>{NAV.map(n => <li key={n.to}><Link to={n.to} onClick={close}>{n.label}</Link></li>)}{isAdmin && <li><Link to="/admin" onClick={close}>관리자 화면</Link></li>}</>}
+          </Dropdown>
           <ThemeToggle />
           <Dropdown label={`${user?.name ?? ''}님`} className="topnav__user">
             {(close) => (

@@ -9,13 +9,14 @@ export default function Dropdown({ label, children, align = 'right', className =
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
   const id = useId()
   const close = () => setOpen(false)
 
   useEffect(() => {
     if (!open) return
     const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); trigger.current?.focus() } }
     document.addEventListener('mousedown', onDoc)
     document.addEventListener('keydown', onKey)
     return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey) }
@@ -23,7 +24,7 @@ export default function Dropdown({ label, children, align = 'right', className =
 
   return (
     <div className={`dropdown ${className}`} ref={ref}>
-      <button type="button" className="dropdown__btn" aria-expanded={open} aria-controls={id} onClick={() => setOpen((v) => !v)}>
+      <button ref={trigger} type="button" className="dropdown__btn" aria-expanded={open} aria-controls={id} onClick={() => setOpen((v) => !v)}>
         {label} <span aria-hidden="true" className="dropdown__caret">▾</span>
       </button>
       {open && <ul id={id} className={`user-menu user-menu--${align}`}>{children(close)}</ul>}
