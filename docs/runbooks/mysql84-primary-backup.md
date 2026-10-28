@@ -1,6 +1,6 @@
 # PC2 승격 후 백업 모드 준비
 
-2026-10-28. **PC2는 현재 Replica다. 이 기능은 승격이나 앱 연결 변경을 수행하지 않는다.** Primary 백업의 실제 실행·복원과 예약/Discord 감시 전환은 아직 검증하지 않았다.
+2026-10-28. **PC2는 현재 Replica다. 이 기능은 승격이나 앱 연결 변경을 수행하지 않는다.** 현장에서Replica 사전검사25테이블PASS와Primary 검사 BACKUP_PRIMARY_NOT_READY/종료1을확인했다. Primary 백업의 실제 실행·복원은미검증이며 [예약·Discord 비활성 준비 절차](mysql84-primary-schedule.md)를추가했다. 실제현장등록·전송·활성화는아직미확인이다.
 
 ## 확인된 현장 전제
 
@@ -59,8 +59,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Primary isolated restore failed.' }
 
 ## 아직 필요한 작업
 
-- 기존예약worker/Discord감시경로는Replica전용이다. 새Primary수동모드를추가한것만으로자동전환됐다고표시하지않는다.
-- Primary용예약·최근성공감시·실패알림을준비하고실제역할전환후백업/격리복원을검증해야한다. 이준비전에는승격하지않는다.
+- 기존설치된예약worker/Discord감시경로는Replica전용으로유지한다. 별도Primary예약·감시코드는추가됐으나현장검증전이며자동전환됐다고표시하지않는다.
+- [비활성등록과시험전송](mysql84-primary-schedule.md)을준비하고실제역할전환후Primary백업/격리복원·예약실행·실패알림을검증해야한다. 준비전에는승격하지않는다.
 - 수동추가한PC2방화벽VM허용원본도후속정책도구에명시적으로반영해야한다. 기존Apply를임의로다시실행하지않는다.
 - CoreDNS는PC1에만1개, 제어부도PC1단독이다. 전체PC1중단시험은별도준비후수행한다.
 

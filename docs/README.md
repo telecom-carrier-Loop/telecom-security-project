@@ -11,6 +11,8 @@
 
 ## 최신 현장 기록
 
+- [PC2 Primary 예약 백업·Discord 감시: 기존 작업 유지와 비활성 준비 절차](runbooks/mysql84-primary-schedule.md)
+
 - [2026-10-28 PC2 앱 계정·제한접속·25개테이블 복원 확인과 Primary 백업 모드 준비](runbooks/mysql84-primary-backup.md)
 
 - [2026-10-28 정리: HAProxy 시험 결과·운영443 전환·남은 검증](operations/2026-10-28-haproxy-public-cutover.md)
