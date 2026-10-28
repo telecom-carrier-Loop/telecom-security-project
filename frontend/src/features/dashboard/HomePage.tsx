@@ -1,149 +1,62 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import ErrorState from '../../components/common/ErrorState'
 import Loading from '../../components/common/Loading'
-import type { DashboardSummary, Notice, ShopItem } from '../../services/types'
+import ServiceIcon, { type ServiceIconName } from '../../components/common/ServiceIcon'
+import type { DashboardSummary, Notice, Plan, ShopItem } from '../../services/types'
 import { STATUS_LABEL, dataSize, dateTime, shortDate, won } from '../../utils/format'
 import { useApi } from '../../utils/useApi'
 
-// 원형 데이터 게이지: 남은 비율을 링으로, 가운데에 남은 양
-function Ring({ ratio, label, sub }: { ratio: number; label: string; sub: string }) {
-  const r = 38, c = 2 * Math.PI * r, left = Math.max(0, Math.min(ratio, 1))
-  return (
-    <svg className="ring" width="120" height="120" viewBox="0 0 96 96" role="img" aria-label={`${label} ${sub}`}>
-      <circle cx="48" cy="48" r={r} fill="none" stroke="var(--ring-track)" strokeWidth="10" />
-      <circle cx="48" cy="48" r={r} fill="none" stroke="var(--signal)" strokeWidth="10" strokeLinecap="round"
-              strokeDasharray={`${c * left} ${c}`} transform="rotate(-90 48 48)" />
-      <text x="48" y="47" textAnchor="middle" fontSize="16" fontWeight="600" fill="var(--ink)">{label}</text>
-      <text x="48" y="62" textAnchor="middle" fontSize="9.5" fill="var(--ink-soft)">{sub}</text>
-    </svg>
-  )
-}
+const CAMPAIGNS = [
+  { title: <>나의 하루에<br />딱 맞는 연결.</>, text: '요금제부터 이용현황까지, 나에게 맞는 통신 생활을 만나보세요.', to: '/plans', action: '요금제 알아보기', tone: 'lilac' },
+  { title: <>매일의 혜택이<br />더 가까워지도록.</>, text: '사용 가능한 포인트와 멤버십 혜택을 한곳에서 확인하세요.', to: '/membership', action: '멤버십 둘러보기', tone: 'peach' },
+  { title: <>필요한 도움을<br />빠르고 간편하게.</>, text: '궁금한 점은 1:1 문의로 남기고, 답변도 편리하게 확인하세요.', to: '/support', action: '고객지원 바로가기', tone: 'mint' },
+]
+const SHORTCUTS: [string, string, ServiceIconName][] = [
+  ['/usage', '내 이용현황', 'usage'], ['/billing', '요금 납부', 'billing'], ['/plans', '요금제', 'plans'],
+  ['/membership', '멤버십', 'membership'], ['/membership/shop', '포인트 상점', 'shop'], ['/support', '1:1 문의', 'support'],
+]
 
-const Icon = ({ d }: { d: string }) => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
-)
-const ICON = {
-  pay: 'M3 7h18v11H3zM3 11h18',
-  kakao: 'M12 4c-5 0-9 3-9 6.7 0 2.4 1.6 4.4 4 5.6L6 20l4.2-2.6c.6.1 1.2.1 1.8.1 5 0 9-3 9-6.8S17 4 12 4z',
-  shop: 'M5 8h14l-1 12H6zM9 8V6a3 3 0 0 1 6 0v2',
-  ask: 'M4 5h16v11H9l-5 4z',
-  notice: 'M4 10v4h3l5 4V6L7 10zM16 9a4 4 0 0 1 0 6',
-}
-
-// 고객 홈 (브랜드 볼드): 파란 배너 + 원형 게이지 카드 + 둥근 바로가기 + 추천·공지
 export default function HomePage() {
-  const { loading, error, data, reload } = useApi<DashboardSummary>('/dashboard/summary')
+  const summary = useApi<DashboardSummary>('/dashboard/summary')
   const shop = useApi<{ items: ShopItem[] }>('/membership/shop')
   const notices = useApi<{ notices: Notice[] }>('/notices')
-  if (loading) return <Loading />
-  if (error || !data) return <ErrorState error={error} onRetry={reload} />
-
-  const { user, subscription, usage, billing, membership, recent_tickets, recent_payments } = data
+  const plans = useApi<{ plans: Plan[] }>('/plans')
+  const [slide, setSlide] = useState(0)
+  if (summary.loading) return <Loading />
+  if (summary.error || !summary.data) return <ErrorState error={summary.error} onRetry={summary.reload} />
+  const { user, subscription, usage, billing, membership, recent_tickets, recent_payments } = summary.data
   const unlimited = !!usage && usage.data_limit_mb < 0
   const left = usage && !unlimited ? Math.max(usage.data_limit_mb - usage.data_used_mb, 0) : null
-  const leftRatio = usage && !unlimited && usage.data_limit_mb > 0 ? (left ?? 0) / usage.data_limit_mb : unlimited ? 1 : 0
-  const greet = !subscription ? '요금제를 골라 보세요'
-    : !usage ? '이용량 수집을 기다리고 있어요'
-    : unlimited ? '이번 달도 마음껏 쓰고 있어요'
-    : leftRatio > 0.5 ? '이번 달도 넉넉해요'
-    : leftRatio > 0.2 ? '절반 넘게 썼어요' : '데이터가 얼마 남지 않았어요'
-  const picks = (shop.data?.items ?? []).filter((i) => i.available).slice(0, 2)
-  const notice = notices.data?.notices?.[0]
-
-  return (
-    <section className="page">
-      {user.failed_attempts_before_login > 0 && (
-        <div className="notice notice--warn" role="alert">
-          지난 로그인 이후 로그인 실패가 {user.failed_attempts_before_login}회 있었습니다.
-          본인이 시도한 게 아니라면 <Link to="/settings">비밀번호를 변경하세요</Link>.
-        </div>
-      )}
-
-      <div className="customer-intro">
-       <div className="hero">
-        <h1 className="hero__greet">{user.name}님, {greet}</h1>
-        <p className="hero__sub">{subscription ? `${subscription.plan.name} · ${subscription.phone_number}` : '회선이 없습니다'}</p>
-        <Link to={subscription ? '/usage' : '/plans'} className="btn">{subscription ? '내 이용현황 보기' : '요금제 살펴보기'}</Link>
-       </div>
-       <figure className="headquarters"><img src="/images/brand/loop-headquarters.webp" width="1536" height="1024" alt="가상 통신사 루프의 본사 외관 이미지" /><figcaption>일상을 잇는 연결, L∞P <span>가상 본사 이미지</span></figcaption></figure>
+  const ratio = usage && usage.data_limit_mb > 0 ? Math.max(0, Math.min(1, (left ?? 0) / usage.data_limit_mb)) : unlimited ? 1 : 0
+  const campaign = CAMPAIGNS[slide]
+  const picks = (shop.data?.items ?? []).filter(i => i.available).slice(0, 3)
+  return <section className="page home-page">
+    {user.failed_attempts_before_login > 0 && <div className="notice notice--warn" role="alert">지난 로그인 이후 로그인 실패가 {user.failed_attempts_before_login}회 있었습니다. 본인이 시도한 게 아니라면 <Link to="/settings">비밀번호를 변경하세요</Link>.</div>}
+    <section className={`portal-hero portal-hero--${campaign.tone}`} aria-label="루프 서비스 안내">
+      <div className="portal-hero__copy" id="campaign-content" role="tabpanel" aria-labelledby={`campaign-tab-${slide}`}>
+        <h1>{campaign.title}</h1><p>{campaign.text}</p>
+        <Link className="btn btn--hero" to={campaign.to}>{campaign.action}<ServiceIcon name="arrow" size={18} /></Link>
       </div>
-
-      <div className="hero-card">
-        <Link to="/usage" aria-label="내 이용현황 자세히">
-          <Ring ratio={leftRatio}
-                label={!subscription ? '-' : unlimited ? '무제한' : left !== null ? dataSize(left) : '-'}
-                sub={!subscription ? '회선 없음' : !usage ? '수집 대기' : unlimited ? '데이터' : '남음'} />
-        </Link>
-        <div className="hero-card__minis">
-          <Link to="/billing" className="mini">
-            <span className="mini__label">이번 달 요금</span>
-            <span className="mini__value">{won(billing.amount_due)}</span>
-            <span className={billing.next_due_date ? 'mini__sub mini__sub--alert' : 'mini__sub'}>
-              {billing.next_due_date ? `${shortDate(billing.next_due_date)}까지` : '미납 요금이 없어요'}
-            </span>
-          </Link>
-          <Link to="/membership" className="mini">
-            <span className="mini__label">{membership ? `L∞P+ ${membership.tier}` : 'L∞P+ 멤버십'}</span>
-            <span className="mini__value">{membership ? `${membership.point_balance.toLocaleString()}P` : '미가입'}</span>
-            <span className="mini__sub">{membership ? '사용 가능한 포인트' : '가입하고 혜택 받기'}</span>
-          </Link>
-        </div>
-      </div>
-
-      <h2 className="section-title">자주 찾는 업무</h2>
-      <nav className="shortcuts" aria-label="바로가기">
-        <Link to="/billing"><Icon d={ICON.pay} />요금 납부</Link>
-        <Link to="/billing" className="shortcuts__kakao"><Icon d={ICON.kakao} />카카오페이 납부</Link>
-        <Link to="/membership/shop"><Icon d={ICON.shop} />포인트 상점</Link>
-        <Link to="/support"><Icon d={ICON.ask} />1:1 문의</Link>
-        <Link to="/notices"><Icon d={ICON.notice} />공지사항</Link>
-      </nav>
-
-      {(picks.length > 0 || notice) && (
-        <div className="picks">
-          {picks.map((i) => (
-            <Link key={i.id} to="/membership/shop" className="pick">
-              <span className="pick__label">{membership ? `${membership.tier} 추천` : '포인트 상점'}</span>
-              <span className="pick__title">{i.name}</span>
-              <span className="muted">{i.price_points.toLocaleString()}P</span>
-            </Link>
-          ))}
-          {notice && (
-            <Link to={`/notices/${notice.id}`} className="pick">
-              <span className="pick__label">공지 · {notice.category_label}</span>
-              <span className="pick__title">{notice.title}</span>
-              <span className="muted">{shortDate(notice.published_at)}</span>
-            </Link>
-          )}
-        </div>
-      )}
-
-      <div className="grid grid--2">
-        <article className="panel">
-          <header className="panel__head"><h2>최근 문의</h2><Link to="/support">전체 보기</Link></header>
-          {recent_tickets.length === 0 ? <p className="muted">남긴 문의가 없습니다.</p> : (
-            <ul className="list">
-              {recent_tickets.map((t) => (
-                <li key={t.id}><span>{t.title}</span><span className="tag">{STATUS_LABEL[t.status]}</span></li>
-              ))}
-            </ul>
-          )}
-        </article>
-        <article className="panel">
-          <header className="panel__head"><h2>최근 결제</h2><Link to="/billing">전체 보기</Link></header>
-          {recent_payments.length === 0 ? <p className="muted">결제 내역이 없습니다.</p> : (
-            <ul className="list">
-              {recent_payments.map((p) => (
-                <li key={p.id}><span>{won(p.amount)}</span><span className="tag">{STATUS_LABEL[p.status]}</span></li>
-              ))}
-            </ul>
-          )}
-        </article>
-      </div>
-
-      <p className="muted security-line">
-        이전 로그인: {dateTime(user.previous_login_at)} · <Link to="/settings">계정 보안 설정</Link>
-      </p>
+      <img className="portal-hero__image" src="/images/brand/loop-devices.webp" alt="" width="1672" height="941" />
+      <div className="campaign-control"><span className="campaign-control__count" aria-hidden="true">{String(slide + 1).padStart(2, '0')} / 03</span><div role="tablist" aria-label="서비스 안내 선택">{CAMPAIGNS.map((c, i) => <button type="button" id={`campaign-tab-${i}`} key={c.to} role="tab" aria-selected={slide === i} aria-controls="campaign-content" tabIndex={slide === i ? 0 : -1} aria-label={c.action} onClick={() => setSlide(i)} onKeyDown={e => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) { e.preventDefault(); const next = e.key === 'Home' ? 0 : e.key === 'End' ? 2 : (i + (e.key === 'ArrowRight' ? 1 : 2)) % 3; setSlide(next); document.getElementById(`campaign-tab-${next}`)?.focus() } }} />)}</div></div>
     </section>
-  )
+    <section className="my-overview" aria-label="내 통신 생활 요약">
+      <div className="my-overview__welcome"><span>반가워요, {user.name}님</span><h2>나의 통신 생활</h2><p>{subscription ? subscription.plan.name : '가입한 회선이 없습니다'}</p><span className="muted">{subscription?.phone_number}</span><Link to="/usage">MY 전체 보기 <span aria-hidden="true">→</span></Link></div>
+      <Link to="/usage" className="overview-stat"><span>남은 데이터</span><strong>{!subscription ? '회선 없음' : !usage ? '수집 대기' : unlimited ? '무제한' : dataSize(left ?? 0)}</strong><span className="data-track" aria-hidden="true"><span style={{ width: `${ratio * 100}%` }} /></span><small>{usage ? unlimited ? '데이터 무제한 요금제' : `기본 제공 ${dataSize(usage.data_limit_mb)}` : '이용현황에서 자세히 보기'}</small></Link>
+      <Link to="/billing" className="overview-stat"><span>이번 달 납부할 요금</span><strong>{won(billing.amount_due)}</strong><small>{billing.next_due_date ? `${shortDate(billing.next_due_date)}까지 납부` : '미납 요금이 없어요'}</small><span className="overview-stat__action">요금 조회·납부 →</span></Link>
+      <Link to="/membership" className="overview-stat"><span>{membership ? `L∞P+ ${membership.tier}` : 'L∞P+ 멤버십'}</span><strong>{membership ? `${membership.point_balance.toLocaleString()}P` : '미가입'}</strong><small>{membership ? '사용 가능한 포인트' : '멤버십 혜택을 만나보세요'}</small><span className="overview-stat__action">멤버십 보기 →</span></Link>
+    </section>
+    <nav className="service-shortcuts" aria-label="자주 찾는 메뉴">{SHORTCUTS.map(([to, label, icon]) => <Link key={to} to={to}><span className="service-shortcuts__icon"><ServiceIcon name={icon} size={30} /></span><span>{label}</span></Link>)}</nav>
+    <section className="home-section">
+      <header className="home-section__head"><div><h2>나에게 맞는 요금제 찾기</h2><p>데이터도 요금도, 내 생활에 맞게 선택하세요.</p></div><Link to="/plans">전체 요금제 <ServiceIcon name="arrow" size={18} /></Link></header>
+      {plans.loading ? <Loading label="요금제 불러오는 중" /> : plans.error ? <ErrorState error={plans.error} onRetry={plans.reload} /> : !plans.data?.plans.length ? <p className="muted">현재 조회 가능한 요금제가 없습니다.</p> : <div className="featured-plans">{plans.data.plans.slice(0, 3).map(p => <Link to="/plans" className="featured-plan" key={p.id}><span className="featured-plan__network">{p.network}</span><h3>{p.name}</h3><strong>{dataSize(p.data_mb)}</strong><p>음성 {p.voice_minutes < 0 ? '무제한' : `${p.voice_minutes}분`}</p><div className="featured-plan__bottom"><span>월 <b>{won(p.monthly_fee)}</b></span><ServiceIcon name="arrow" size={20} /></div></Link>)}</div>}
+    </section>
+    <section className="membership-feature"><div><h2>일상에 더하는<br /><span>L∞P+ 멤버십</span></h2><p>내 포인트로 만나는 다양한 혜택.<br />사용 가능한 상품을 확인해 보세요.</p><Link to="/membership" className="text-link">내 멤버십 확인 <ServiceIcon name="arrow" size={18} /></Link></div><div className="benefit-selection">{shop.loading ? <Loading label="혜택 불러오는 중" /> : shop.error ? <ErrorState error={shop.error} onRetry={shop.reload} /> : picks.length ? picks.map(i => <Link key={i.id} to="/membership/shop" className="benefit-item"><span className="benefit-item__symbol"><ServiceIcon name="shop" size={26} /></span><div><h3>{i.name}</h3><span>{i.price_points.toLocaleString()}P</span></div><ServiceIcon name="arrow" size={18} /></Link>) : <p className="muted">현재 사용 가능한 상품이 없습니다. <Link to="/membership/shop">상점 보기</Link></p>}</div></section>
+    <section className="home-section"><header className="home-section__head"><div><h2>루프가 도와드릴게요</h2><p>필요한 안내와 나의 처리 내역을 확인하세요.</p></div><Link to="/support">고객지원 <ServiceIcon name="arrow" size={18} /></Link></header>
+      <div className="home-activity"><article><header className="panel__head"><h3>최근 문의</h3><Link to="/support">전체 보기</Link></header>{recent_tickets.length ? <ul className="list">{recent_tickets.map(t => <li key={t.id}><Link to={`/support/${t.id}`}>{t.title}</Link><span className="tag">{STATUS_LABEL[t.status]}</span></li>)}</ul> : <p className="muted">아직 남긴 문의가 없습니다.</p>}</article><article><header className="panel__head"><h3>최근 결제</h3><Link to="/billing">전체 보기</Link></header>{recent_payments.length ? <ul className="list">{recent_payments.map(p => <li key={p.id}><span>{won(p.amount)}</span><span className="tag">{STATUS_LABEL[p.status]}</span></li>)}</ul> : <p className="muted">최근 결제 내역이 없습니다.</p>}</article></div>
+    </section>
+    <section className="notice-strip"><h2>공지사항</h2><div>{notices.loading ? <span className="muted">공지 불러오는 중</span> : notices.error ? <span className="muted">공지를 불러오지 못했습니다.</span> : notices.data?.notices[0] ? <Link to={`/notices/${notices.data.notices[0].id}`}>{notices.data.notices[0].title}</Link> : <span className="muted">등록된 공지가 없습니다.</span>}</div><Link to="/notices" aria-label="공지사항 전체 보기"><ServiceIcon name="arrow" size={20} /></Link></section>
+    <p className="muted security-line">이전 로그인: {dateTime(user.previous_login_at)} · <Link to="/settings">계정 보안 설정</Link></p>
+  </section>
 }

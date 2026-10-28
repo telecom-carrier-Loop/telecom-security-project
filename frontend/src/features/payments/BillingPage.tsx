@@ -71,6 +71,7 @@ export default function BillingPage() {
   return (
     <section className="page">
       <h1 className="page__title">요금 납부</h1>
+      <p className="page__lead muted">청구 내역부터 납부 결과까지 한곳에서 확인하세요. 결제는 테스트용입니다.</p>
 
       {result && <div className={`notice ${result.type === 'ok' ? 'notice--ok' : 'notice--warn'}`} role="status">{result.text}</div>}
 

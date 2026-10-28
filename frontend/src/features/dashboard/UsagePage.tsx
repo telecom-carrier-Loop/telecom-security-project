@@ -31,6 +31,7 @@ export default function UsagePage() {
   return (
     <section className="page">
       <h1 className="page__title">내 이용현황</h1>
+      <p className="page__lead muted">나의 회선과 이번 달 데이터·통화 사용량을 확인하세요.</p>
       <div className="grid grid--usage">
         <article className="panel panel--hero">
           <header className="panel__head"><h2>데이터</h2><span className="muted">{s.phone_number}</span></header>
