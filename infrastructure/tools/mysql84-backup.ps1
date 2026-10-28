@@ -1,15 +1,18 @@
 [CmdletBinding()]
 param(
     [string]$RepositoryPath,
-    [ValidateSet('SaveCredential', 'BackupSaved', 'Backup', 'RestoreTest', 'Status')][string]$Action = 'Status'
+    [ValidateSet('SaveCredential', 'PreflightSaved', 'BackupSaved', 'Backup', 'RestoreTest', 'Status')][string]$Action = 'Status',
+    [ValidateSet('Replica', 'Primary')][string]$SourceRole = 'Replica'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ([string]::IsNullOrWhiteSpace($RepositoryPath)) { $RepositoryPath = Join-Path $PSScriptRoot '../..' }
 $repo = (Resolve-Path -LiteralPath $RepositoryPath).Path
-$root = Join-Path $repo '.secrets/backups/mysql84/pc2'
+$replicaRoot = Join-Path $repo '.secrets/backups/mysql84/pc2'
+$root = if ($SourceRole -eq 'Primary') { Join-Path $repo '.secrets/backups/mysql84/pc2-primary' } else { $replicaRoot }
 $latest = Join-Path $root 'latest.json'
-$credentialDirectory = Join-Path $root 'credentials'
+# Both roles use the same container-local loop_backup account and Windows DPAPI identity.
+$credentialDirectory = Join-Path $replicaRoot 'credentials'
 $credentialFile = Join-Path $credentialDirectory 'loop_backup.clixml'
 $utf8 = [Text.UTF8Encoding]::new($false)
 $pc2Uuid = 'f1868a2a-a5a5-11f1-8815-9693e922f083'
@@ -27,6 +30,10 @@ function Invoke-BackupDocker([string[]]$Arguments, [switch]$AllowFailure) {
     $script:BackupDockerExitCode = $code
     if ($code -ne 0) {
         if ($AllowFailure) { return }
+        # Report only the known guard marker; never echo arbitrary client/authentication output.
+        if (($lines -join "`n") -match "1054[^\r\n]*Unknown column 'BACKUP_PRIMARY_NOT_READY'") {
+            throw 'BACKUP_PRIMARY_NOT_READY: PC2 is not a writable Primary with stopped replication. No dump was started.'
+        }
         throw ('Docker ' + $Arguments[0] + ' failed. Keep backup files; run Status. Do not restore into mysql-lab.')
     }
     foreach ($line in $lines) { $line.ToString() }
@@ -82,7 +89,8 @@ function Initialize-BackupClient($Credential) {
 }
 function Save-BackupState([string]$Stage) {
     $state.Stage = $Stage
-    Write-BackupText $latest ($state | ConvertTo-Json -Depth 8)
+    # A role probe must not replace the latest complete backup/restore pointer.
+    if ($Action -ne 'PreflightSaved') { Write-BackupText $latest ($state | ConvertTo-Json -Depth 8) }
     Write-BackupText (Join-Path $state.Directory 'state.json') ($state | ConvertTo-Json -Depth 8)
 }
 function Get-BackupContainer([string]$Id) {
@@ -118,6 +126,8 @@ function Read-BackupManifest {
     $manifestFile = Join-Path $state.Directory 'manifest.json'
     if ((Get-FileHash -LiteralPath $manifestFile).Hash -ine $state.ManifestSha256) { throw 'Backup manifest hash changed.' }
     $manifest = Get-Content -LiteralPath $manifestFile -Raw | ConvertFrom-Json
+    $manifestRole = if ($null -ne $manifest.PSObject.Properties['SourceRole']) { $manifest.SourceRole } else { 'Replica' }
+    if ($manifestRole -cne $SourceRole) { throw 'Backup source role does not match this restore workspace.' }
     $tables = @($manifest.Tables)
     if ($manifest.Format -ne 'loop-mysql84-backup-v1' -or $manifest.Database -ne 'my_new_board_db' -or $manifest.SourceUuid -ne $pc2Uuid -or $manifest.ImageId -ne $state.ImageId -or $tables.Count -eq 0 -or @($tables | Select-Object -Unique).Count -ne $tables.Count) { throw 'Unexpected backup manifest.' }
     foreach ($table in $tables) { if ($table -notmatch '^[A-Za-z_][A-Za-z0-9_]{0,63}$') { throw 'Unsupported table identifier.' } }
@@ -128,6 +138,7 @@ function Read-BackupManifest {
 }
 
 if ($Action -eq 'Status') {
+    Write-Host ('Source role: ' + $SourceRole)
     if (-not (Test-Path -LiteralPath $latest)) { Write-Host 'No backup run exists.'; exit 0 }
     $state = Get-Content -LiteralPath $latest -Raw | ConvertFrom-Json
     Write-Host ('Stage: ' + $state.Stage)
@@ -137,7 +148,9 @@ if ($Action -eq 'Status') {
     exit 0
 }
 $null = New-Item -ItemType Directory -Path $root -Force
-try { $operationLock = [IO.File]::Open((Join-Path $root 'operation.lock'), 'OpenOrCreate', 'ReadWrite', 'None') }
+$null = New-Item -ItemType Directory -Path $replicaRoot -Force
+# Serialize both roles with the already installed Replica scheduler.
+try { $operationLock = [IO.File]::Open((Join-Path $replicaRoot 'operation.lock'), 'OpenOrCreate', 'ReadWrite', 'None') }
 catch { throw 'Another backup, credential setup or restore test is running. No action was started.' }
 try {
 $sourceInfo = Get-BackupSource
@@ -157,8 +170,8 @@ if ($Action -eq 'SaveCredential') {
     exit 0
 }
 
-if ($Action -in @('Backup', 'BackupSaved')) {
-    $saved = $Action -eq 'BackupSaved'
+if ($Action -in @('Backup', 'BackupSaved', 'PreflightSaved')) {
+    $saved = $Action -in @('BackupSaved', 'PreflightSaved')
     $savedCredential = $null
     if ($saved) { $savedCredential = Read-SavedBackupCredential }
     if (Test-Path -LiteralPath $latest) {
@@ -166,28 +179,43 @@ if ($Action -in @('Backup', 'BackupSaved')) {
         if ($previous.Stage -in @('test-created', 'test-running', 'restoring', 'restore-checked')) { throw 'Finish or inspect the pending restore test before starting another backup.' }
     }
     $tag = (Get-Date -Format 'yyyyMMdd-HHmmss-fff') + '-' + [guid]::NewGuid().ToString('N').Substring(0,6)
-    $directory = Join-Path $root $tag
+    $testPrefix = if ($SourceRole -eq 'Primary') { 'loop-mysql84-primary' } else { 'loop-mysql84' }
+    $directory = Join-Path $root $(if ($Action -eq 'PreflightSaved') { 'preflight-' + $tag } else { $tag })
     $null = New-Item -ItemType Directory -Path $directory -Force
     $state = [PSCustomObject]@{
-        Stage='backup-started'; Directory=$directory; SourceId=$sourceInfo.Container.Id
+        Stage='backup-started'; SourceRole=$SourceRole; Directory=$directory; SourceId=$sourceInfo.Container.Id
         ImageId=$sourceInfo.Container.Image; TempDirectory=('/tmp/loop-backup-' + $tag)
-        TestName=('loop-mysql84-restore-' + $tag); TestVolume=('loop-mysql84-restore-data-' + $tag)
+        TestName=($testPrefix + '-restore-' + $tag); TestVolume=($testPrefix + '-restore-data-' + $tag)
         TestId=''; ManifestSha256=''
     }
     Save-BackupState 'backup-started'
     try {
     $primaryUuid = $sourceInfo.Role.PrimaryUuid
-    $preflight = @"
-SET @loop_guard = IF(VERSION()='8.4.11' AND @@GLOBAL.server_id=2
-    AND @@GLOBAL.server_uuid='$pc2Uuid' AND @@GLOBAL.read_only=1 AND @@GLOBAL.super_read_only=1
-    AND @@GLOBAL.gtid_mode='ON' AND @@GLOBAL.enforce_gtid_consistency='ON'
+    $roleGuard = if ($SourceRole -eq 'Primary') {
+@"
+    AND @@GLOBAL.read_only=0 AND @@GLOBAL.super_read_only=0
+    AND @@GLOBAL.log_bin=1 AND @@GLOBAL.log_replica_updates=1
+    AND (SELECT COUNT(1) FROM performance_schema.replication_connection_status WHERE SERVICE_STATE='ON')=0
+    AND (SELECT COUNT(1) FROM performance_schema.replication_applier_status WHERE SERVICE_STATE='ON')=0
+"@
+    } else {
+@"
+    AND @@GLOBAL.read_only=1 AND @@GLOBAL.super_read_only=1
     AND (SELECT COUNT(1) FROM performance_schema.replication_connection_status WHERE CHANNEL_NAME='' AND SOURCE_UUID='$primaryUuid' AND SERVICE_STATE='ON' AND LAST_ERROR_NUMBER=0)=1
     AND (SELECT COUNT(1) FROM performance_schema.replication_applier_status WHERE CHANNEL_NAME='' AND SERVICE_STATE='ON')=1
+"@
+    }
+    $guardFailure = if ($SourceRole -eq 'Primary') { 'BACKUP_PRIMARY_NOT_READY' } else { 'BACKUP_REPLICA_NOT_HEALTHY' }
+    $preflight = @"
+SET @loop_guard = IF(VERSION()='8.4.11' AND @@GLOBAL.server_id=2
+    AND @@GLOBAL.server_uuid='$pc2Uuid'
+    AND @@GLOBAL.gtid_mode='ON' AND @@GLOBAL.enforce_gtid_consistency='ON'
+$roleGuard
     AND (SELECT COALESCE(MAX(LAST_ERROR_NUMBER),0) FROM performance_schema.replication_applier_status_by_worker)=0
     AND (SELECT COALESCE(MAX(LAST_ERROR_NUMBER),0) FROM performance_schema.replication_applier_status_by_coordinator)=0
     AND (SELECT COUNT(1) FROM information_schema.TABLES WHERE TABLE_SCHEMA='my_new_board_db' AND TABLE_TYPE='BASE TABLE')>0
     AND (SELECT COUNT(1) FROM information_schema.TABLES WHERE TABLE_SCHEMA='my_new_board_db' AND TABLE_TYPE='BASE TABLE' AND ENGINE<>'InnoDB')=0,
-    'SELECT 1','SELECT BACKUP_REPLICA_NOT_HEALTHY');
+    'SELECT 1','SELECT $guardFailure');
 PREPARE loop_guard_statement FROM @loop_guard;
 EXECUTE loop_guard_statement;
 DEALLOCATE PREPARE loop_guard_statement;
@@ -224,6 +252,11 @@ WHERE TABLE_SCHEMA='my_new_board_db' AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_
         }
     })
     if ($tables.Count -eq 0 -or @($tables | Select-Object -Unique).Count -ne $tables.Count) { throw 'Preflight did not return unique base tables.' }
+    if ($Action -eq 'PreflightSaved') {
+        Save-BackupState 'preflight-passed'
+        Write-Host ('PASS: ' + $SourceRole + ' backup preflight; ' + $tables.Count + ' base tables. No dump, restore or role change was performed.')
+        exit 0
+    }
     if (-not $saved) { Write-Host 'Enter SAME PC2 root password for mysqldump (second prompt). Do not run schema migrations during this dump.' }
     Invoke-BackupDocker ($execArguments + @('mysqldump') + $auth + @('--default-character-set=utf8mb4', '--single-transaction', '--quick', '--skip-lock-tables', '--no-tablespaces', '--routines', '--events', '--triggers', '--hex-blob', '--set-gtid-purged=OFF', ('--result-file=' + $state.TempDirectory + '/snapshot.sql'), '--databases', 'my_new_board_db'))
     $partial = Join-Path $directory 'snapshot.sql.partial'
@@ -232,7 +265,7 @@ WHERE TABLE_SCHEMA='my_new_board_db' AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_
     if ($headers.Count -ne $tables.Count -or @(Compare-Object $headers $tables).Count -ne 0 -or @(Select-String -LiteralPath $partial -Pattern '^SET @@GLOBAL.GTID_PURGED=').Count -ne 0 -or @(Get-Content -LiteralPath $partial -Tail 5 | Select-String -Pattern '^-- Dump completed on ').Count -ne 1) { throw 'Backup is incomplete or table metadata changed. Keep partial files; no valid backup was published.' }
     $dump = Join-Path $directory 'snapshot.sql'
     [IO.File]::Move($partial, $dump)
-    $manifest = [PSCustomObject]@{Format='loop-mysql84-backup-v1'; Database='my_new_board_db'; SourceUuid=$pc2Uuid; ImageId=$state.ImageId; CreatedUtc=[DateTime]::UtcNow.ToString('o'); Tables=$tables; Length=(Get-Item $dump).Length; Sha256=(Get-FileHash $dump).Hash}
+    $manifest = [PSCustomObject]@{Format='loop-mysql84-backup-v1'; SourceRole=$SourceRole; Database='my_new_board_db'; SourceUuid=$pc2Uuid; ImageId=$state.ImageId; CreatedUtc=[DateTime]::UtcNow.ToString('o'); Tables=$tables; Length=(Get-Item $dump).Length; Sha256=(Get-FileHash $dump).Hash}
     $manifestFile = Join-Path $directory 'manifest.json'
     Write-BackupText $manifestFile ($manifest | ConvertTo-Json -Depth 6)
     $state.ManifestSha256 = (Get-FileHash $manifestFile).Hash

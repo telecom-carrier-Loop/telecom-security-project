@@ -1,21 +1,23 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$RepositoryPath,
-    [ValidateSet('Install', 'Repair', 'Run', 'Test', 'Status')][string]$Action = 'Status',
-    [string]$BackupToolPath
+    [ValidateSet('Prepare', 'Install', 'Repair', 'Run', 'Test', 'Status')][string]$Action = 'Status',
+    [string]$BackupToolPath,
+    [ValidateSet('Replica', 'Primary')][string]$SourceRole = 'Replica'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($env:OS -ne 'Windows_NT') { throw 'This scheduler requires Windows.' }
 $repo = (Resolve-Path -LiteralPath $RepositoryPath).Path
-$backupRoot = Join-Path $repo '.secrets/backups/mysql84/pc2'
+$replicaRoot = Join-Path $repo '.secrets/backups/mysql84/pc2'
+$backupRoot = if ($SourceRole -eq 'Primary') { Join-Path $repo '.secrets/backups/mysql84/pc2-primary' } else { $replicaRoot }
 $root = Join-Path $backupRoot 'scheduler'
 $configFile = Join-Path $root 'config.json'
 $runFile = Join-Path $root 'last-run.json'
 $successFile = Join-Path $root 'last-success.json'
 $workerFile = Join-Path $root 'mysql84-backup-schedule.ps1'
 $backupFile = Join-Path $root 'mysql84-backup.ps1'
-$taskName = 'Loop-MySQL84-PC2-Hourly-Backup'
+$taskName = if ($SourceRole -eq 'Primary') { 'Loop-MySQL84-PC2-Primary-Hourly-Backup' } else { 'Loop-MySQL84-PC2-Hourly-Backup' }
 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $powershell = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
 $utf8 = [Text.UTF8Encoding]::new($false)
@@ -45,6 +47,7 @@ function New-ScheduleDirectory {
 function Read-ScheduleConfig {
     $value = Get-Content -LiteralPath $configFile -Raw | ConvertFrom-Json
     if ($value.Format -ne 'loop-mysql84-hourly-v1' -or $value.RepositoryPath -ne $repo -or $value.OwnerSid -ne $sid -or $value.TaskName -ne $taskName) { throw 'Scheduler identity changed. Use the original PC2 Windows user.' }
+    if ($SourceRole -eq 'Primary' -and ($null -eq $value.PSObject.Properties['SourceRole'] -or $value.SourceRole -cne 'Primary' -or $null -eq $value.PSObject.Properties['ActivationPending'])) { throw 'Primary scheduler role or activation state is missing.' }
     foreach ($entry in @(@($workerFile, $value.WorkerSha256), @($backupFile, $value.BackupSha256))) {
         $item = Get-Item -LiteralPath $entry[0]
         if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or (Get-FileHash -LiteralPath $entry[0]).Hash -ine $entry[1]) { throw 'Installed scheduler/backup tool hash changed. No backup was started.' }
@@ -53,7 +56,8 @@ function Read-ScheduleConfig {
     $value
 }
 function Get-WorkerArguments {
-    '-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy RemoteSigned -File "' + $workerFile + '" -RepositoryPath "' + $repo + '" -Action Run'
+    $roleArgument = if ($SourceRole -eq 'Primary') { ' -SourceRole Primary' } else { '' }
+    '-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy RemoteSigned -File "' + $workerFile + '" -RepositoryPath "' + $repo + '" -Action Run' + $roleArgument
 }
 function Assert-ScheduleTask {
     [xml]$xml = Export-ScheduledTask -TaskName $taskName -TaskPath '\'
@@ -83,6 +87,7 @@ function Show-ScheduleStatus {
     Write-Host ('Task: ' + $taskName)
     Write-Host 'Interval: 1 hour; current user must be logged on; PC and Docker Desktop must be running.'
     Write-Host ('Task state: ' + $task.State)
+    if ($SourceRole -eq 'Primary') { Write-Host ('Primary activation pending: ' + $config.ActivationPending) }
     Write-Host ('Last task result: 0x' + ('{0:X8}' -f [uint32]$info.LastTaskResult))
     Write-Host ('Next run: ' + $info.NextRunTime)
     foreach ($path in @($runFile, $successFile)) {
@@ -95,16 +100,24 @@ function Show-ScheduleStatus {
     }
 }
 
-if ($Action -eq 'Install') {
+if ($Action -in @('Install', 'Prepare')) {
+    if ($Action -eq 'Prepare' -and $SourceRole -ne 'Primary') { throw 'Prepare is only for a separate disabled Primary schedule.' }
     if (-not (Test-Path -LiteralPath $configFile)) {
         if (Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction SilentlyContinue) { throw 'Task name already exists without this installation. It will not be replaced.' }
-        $verified = Get-Content -LiteralPath (Join-Path $backupRoot 'latest.json') -Raw | ConvertFrom-Json
+        $verificationRoot = if ($Action -eq 'Prepare') { $replicaRoot } else { $backupRoot }
+        $verified = Get-Content -LiteralPath (Join-Path $verificationRoot 'latest.json') -Raw | ConvertFrom-Json
         if ($verified.Stage -ne 'restore-verified') { throw 'Finish the saved-account backup and isolated restore test before installing the schedule.' }
-        $credential = Import-Clixml -LiteralPath (Join-Path $backupRoot 'credentials/loop_backup.clixml')
+        if ($SourceRole -eq 'Primary' -and $Action -eq 'Install' -and ($null -eq $verified.PSObject.Properties['SourceRole'] -or $verified.SourceRole -cne 'Primary')) { throw 'A verified Primary restore is required for activation.' }
+        $credential = Import-Clixml -LiteralPath (Join-Path $replicaRoot 'credentials/loop_backup.clixml')
         if ($credential -isnot [Management.Automation.PSCredential] -or $credential.UserName -cne 'loop_backup' -or $credential.Password.Length -eq 0) { throw 'Expected this Windows user''s encrypted loop_backup credential.' }
         $credential = $null
         if ([string]::IsNullOrWhiteSpace($BackupToolPath)) { throw 'BackupToolPath is required for the first installation.' }
         $sourceTool = (Resolve-Path -LiteralPath $BackupToolPath).Path
+        if ($SourceRole -eq 'Primary') {
+            $tokens=$null; $parseErrors=$null
+            $ast=[Management.Automation.Language.Parser]::ParseFile($sourceTool,[ref]$tokens,[ref]$parseErrors)
+            if ($parseErrors.Count -gt 0 -or 'SourceRole' -notin @($ast.ParamBlock.Parameters | ForEach-Object { $_.Name.VariablePath.UserPath })) { throw 'Primary schedule requires the role-aware backup tool.' }
+        }
         $docker = (Get-Command docker -CommandType Application -ErrorAction Stop).Source
         New-ScheduleDirectory
         Copy-Item -LiteralPath $PSCommandPath -Destination $workerFile
@@ -114,6 +127,11 @@ if ($Action -eq 'Install') {
             DockerPath=$docker; WorkerSha256=(Get-FileHash -LiteralPath $workerFile).Hash
             BackupSha256=(Get-FileHash -LiteralPath $backupFile).Hash; CreatedUtc=[DateTime]::UtcNow.ToString('o')
             VerifiedRestoreDirectory=$verified.Directory
+        }
+        if ($SourceRole -eq 'Primary') {
+            $config | Add-Member -NotePropertyName SourceRole -NotePropertyValue 'Primary'
+            $config | Add-Member -NotePropertyName ActivationPending -NotePropertyValue ($Action -eq 'Prepare')
+            if ($Action -eq 'Prepare') { $config.VerifiedRestoreDirectory='' }
         }
         Write-ScheduleJson $configFile $config
     }
@@ -128,6 +146,19 @@ if ($Action -eq 'Install') {
         $null = Register-ScheduledTask -TaskName $taskName -TaskPath '\' -Action $taskAction -Trigger $trigger -Principal $principal -Settings $settings -Description 'Hourly PC2 MySQL backup using the current Windows user and encrypted loop_backup credential.'
     }
     Assert-ScheduleTask
+    if ($Action -eq 'Prepare') {
+        if (-not $config.ActivationPending -or (Get-ScheduledTask -TaskName $taskName -TaskPath '\').State -ne 'Disabled') { throw 'Existing Primary schedule is not in the prepared/disabled state. No task was disabled or replaced.' }
+        Write-Host 'PASS: Primary backup task prepared DISABLED. Existing Replica tasks unchanged. No backup or role change performed.'
+        Show-ScheduleStatus
+        exit 0
+    }
+    if ($SourceRole -eq 'Primary' -and $config.ActivationPending) {
+        $verified = Get-Content -LiteralPath (Join-Path $backupRoot 'latest.json') -Raw | ConvertFrom-Json
+        if ($verified.Stage -ne 'restore-verified' -or $null -eq $verified.PSObject.Properties['SourceRole'] -or $verified.SourceRole -cne 'Primary') { throw 'Primary activation requires a successful Primary backup and isolated restore. Task remains disabled.' }
+        $config.VerifiedRestoreDirectory=$verified.Directory
+        $config.ActivationPending=$false
+        Write-ScheduleJson $configFile $config
+    }
     $null = Enable-ScheduledTask -TaskName $taskName -TaskPath '\'
     Write-Host 'PASS: hourly backup task installed. Next run Test to verify a real Task Scheduler execution.'
     Show-ScheduleStatus
@@ -136,6 +167,7 @@ if ($Action -eq 'Install') {
 
 $config = Read-ScheduleConfig
 if ($Action -eq 'Repair') {
+    if ($SourceRole -eq 'Primary' -and $config.ActivationPending) { throw 'Prepared Primary schedule cannot be activated by Repair. Complete Primary backup/restore and use Install.' }
     Assert-ScheduleTask
     $task = Get-ScheduledTask -TaskName $taskName -TaskPath '\'
     if ($task.State -eq 'Running') { throw 'Task is running. Wait for completion before Repair; it will not be stopped.' }
@@ -169,6 +201,7 @@ if ($Action -eq 'Repair') {
     exit 0
 }
 if ($Action -eq 'Status') { Show-ScheduleStatus; exit 0 }
+if ($SourceRole -eq 'Primary' -and $config.ActivationPending) { throw 'Primary schedule is prepared only. No Run or Test is allowed before Primary backup/restore and Install.' }
 if ($Action -eq 'Test') {
     Assert-ScheduleTask
     $task = Get-ScheduledTask -TaskName $taskName -TaskPath '\'
@@ -205,7 +238,7 @@ try { $runLock = [IO.File]::Open((Join-Path $root 'run.lock'), 'OpenOrCreate', '
 catch { throw 'Another scheduled worker is running.' }
 try {
     $runId = [guid]::NewGuid().ToString('N')
-    $record = [PSCustomObject]@{RunId=$runId; Status='running'; StartedUtc=[DateTime]::UtcNow.ToString('o'); CompletedUtc=''; ExitCode=$null; BackupDirectory=''; Log=(Join-Path $root ('run-' + $runId + '.log'))}
+    $record = [PSCustomObject]@{RunId=$runId; SourceRole=$SourceRole; Status='running'; StartedUtc=[DateTime]::UtcNow.ToString('o'); CompletedUtc=''; ExitCode=$null; BackupDirectory=''; Log=(Join-Path $root ('run-' + $runId + '.log'))}
     Write-ScheduleJson $runFile $record
     $previousDirectory = ''
     $latest = Join-Path $backupRoot 'latest.json'
@@ -214,10 +247,12 @@ try {
         if (Test-Path -LiteralPath $latest) { $previousDirectory = (Get-Content -LiteralPath $latest -Raw | ConvertFrom-Json).Directory }
         $env:PATH = (Split-Path -Path $config.DockerPath -Parent) + ';' + $env:PATH
         $global:LASTEXITCODE = 0
-        & $backupFile -RepositoryPath $repo -Action BackupSaved *> $record.Log
+        if ($SourceRole -eq 'Primary') { & $backupFile -RepositoryPath $repo -Action BackupSaved -SourceRole Primary *> $record.Log }
+        else { & $backupFile -RepositoryPath $repo -Action BackupSaved *> $record.Log }
         if ($LASTEXITCODE -ne 0) { throw 'BackupSaved returned a failure code.' }
         $result = Get-Content -LiteralPath $latest -Raw | ConvertFrom-Json
         if ($result.Stage -ne 'backup-ready' -or $result.Directory -eq $previousDirectory -or (Split-Path -Path $result.Directory -Parent) -ne $backupRoot -or -not (Test-Path -LiteralPath (Join-Path $result.Directory 'manifest.json'))) { throw 'No new complete backup was recorded.' }
+        if ($SourceRole -eq 'Primary' -and ($null -eq $result.PSObject.Properties['SourceRole'] -or $result.SourceRole -cne 'Primary')) { throw 'Primary worker received a backup from a different role.' }
         $record.Status = 'success'; $record.ExitCode = 0; $record.CompletedUtc = [DateTime]::UtcNow.ToString('o'); $record.BackupDirectory = $result.Directory
         Write-ScheduleJson $successFile $record
         Write-ScheduleJson $runFile $record
