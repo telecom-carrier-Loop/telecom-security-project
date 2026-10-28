@@ -68,7 +68,7 @@ function global:docker {
                     if ($Case -in @('PrimaryRejected','BackupRejected')) {
                         if ($sql -notmatch 'BACKUP_PRIMARY_NOT_READY' -or $sql -notmatch 'read_only=0' -or $sql -notmatch 'super_read_only=0') { throw 'Missing Primary guard' }
                         $global:LASTEXITCODE=1
-                        'Simulated MySQL guard rejection'
+                        "ERROR 1054 (42S22): Unknown column 'BACKUP_PRIMARY_NOT_READY' in 'field list'"
                     } elseif ($Case -in @('ReplicaProbe','ReplicaBackup')) {
                         if ($sql -notmatch 'BACKUP_REPLICA_NOT_HEALTHY' -or $sql -notmatch 'read_only=1' -or $sql -notmatch "SOURCE_UUID='98e409fb-a5c6-11f1-8bc1-9f1aa3e284ef'") { throw 'Replica guard changed' }
                     } elseif ($Case -in @('PrimaryProbe','PrimaryBackup')) {
@@ -117,8 +117,8 @@ if ($Case -in @('ReplicaProbe','PrimaryProbe')) {
     if ($state.Stage -ne 'backup-ready' -or $state.SourceRole -cne $sourceRole -or $manifest.SourceRole -cne $sourceRole) { throw 'Backup role or completion mismatch' }
 } else {
     $expected = switch ($Case) {
-        'PrimaryRejected' { 'Docker exec failed' }
-        'BackupRejected' { 'Docker exec failed' }
+        'PrimaryRejected' { 'BACKUP_PRIMARY_NOT_READY' }
+        'BackupRejected' { 'BACKUP_PRIMARY_NOT_READY' }
         'SharedLock' { 'Another backup' }
         'WrongContainer' { 'Actual PC2 source identity changed' }
         'WrongManifest' { 'Backup source role does not match' }

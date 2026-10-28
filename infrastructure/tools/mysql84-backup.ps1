@@ -30,6 +30,10 @@ function Invoke-BackupDocker([string[]]$Arguments, [switch]$AllowFailure) {
     $script:BackupDockerExitCode = $code
     if ($code -ne 0) {
         if ($AllowFailure) { return }
+        # Report only the known guard marker; never echo arbitrary client/authentication output.
+        if (($lines -join "`n") -match "1054[^\r\n]*Unknown column 'BACKUP_PRIMARY_NOT_READY'") {
+            throw 'BACKUP_PRIMARY_NOT_READY: PC2 is not a writable Primary with stopped replication. No dump was started.'
+        }
         throw ('Docker ' + $Arguments[0] + ' failed. Keep backup files; run Status. Do not restore into mysql-lab.')
     }
     foreach ($line in $lines) { $line.ToString() }
