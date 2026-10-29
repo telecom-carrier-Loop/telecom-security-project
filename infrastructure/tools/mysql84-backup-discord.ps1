@@ -1,13 +1,15 @@
 ﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$RepositoryPath,
-    [ValidateSet('SaveWebhook', 'Update', 'TestAlert', 'Check', 'Install', 'Status')][string]$Action = 'Status'
+    [ValidateSet('Prepare', 'SaveWebhook', 'Update', 'TestAlert', 'Check', 'Install', 'Status')][string]$Action = 'Status',
+    [ValidateSet('Replica', 'Primary')][string]$SourceRole = 'Replica'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($env:OS -ne 'Windows_NT') { throw 'This monitor requires Windows and the original PC2 Windows user.' }
 $repo = (Resolve-Path -LiteralPath $RepositoryPath).Path
-$backupRoot = Join-Path $repo '.secrets/backups/mysql84/pc2'
+$replicaRoot = Join-Path $repo '.secrets/backups/mysql84/pc2'
+$backupRoot = if ($SourceRole -eq 'Primary') { Join-Path $repo '.secrets/backups/mysql84/pc2-primary' } else { $replicaRoot }
 $scheduler = Join-Path $backupRoot 'scheduler'
 $root = Join-Path $backupRoot 'discord-monitor'
 $configFile = Join-Path $root 'config.json'
@@ -16,8 +18,8 @@ $workerFile = Join-Path $root 'mysql84-backup-discord.ps1'
 $reportFile = Join-Path $root 'last-check.json'
 $incidentFile = Join-Path $root 'incident.json'
 $receiptFile = Join-Path $root 'test-delivery.json'
-$taskName = 'Loop-MySQL84-PC2-Backup-Discord-Monitor'
-$backupTaskName = 'Loop-MySQL84-PC2-Hourly-Backup'
+$taskName = if ($SourceRole -eq 'Primary') { 'Loop-MySQL84-PC2-Primary-Backup-Discord-Monitor' } else { 'Loop-MySQL84-PC2-Backup-Discord-Monitor' }
+$backupTaskName = if ($SourceRole -eq 'Primary') { 'Loop-MySQL84-PC2-Primary-Hourly-Backup' } else { 'Loop-MySQL84-PC2-Hourly-Backup' }
 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $powershell = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe'
 $utf8 = [Text.UTF8Encoding]::new($false)
@@ -41,11 +43,39 @@ function Read-MonitorConfig {
     $value = Read-MonitorJson $configFile
     if ($value.Format -ne 'loop-mysql84-discord-v1' -or $value.OwnerSid -ne $sid -or $value.RepositoryPath -ne $repo -or
         $value.StaleMinutes -ne 90 -or $value.RunningMinutes -ne 12 -or $value.ReminderMinutes -ne 60) { throw 'Monitor configuration changed or belongs to another user.' }
+    if ($SourceRole -eq 'Primary' -and ($null -eq $value.PSObject.Properties['SourceRole'] -or $value.SourceRole -cne 'Primary' -or $null -eq $value.PSObject.Properties['ActivationPending'])) { throw 'Primary monitor role or activation state is missing.' }
     if ((Get-FileHash -LiteralPath $workerFile).Hash -ine $value.WorkerSha256) { throw 'Installed monitor hash changed. No message or task update was attempted.' }
     $value
 }
 function Get-MonitorArguments {
-    '-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy RemoteSigned -File "' + $workerFile + '" -RepositoryPath "' + $repo + '" -Action Check'
+    $roleArgument = if ($SourceRole -eq 'Primary') { ' -SourceRole Primary' } else { '' }
+    '-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy RemoteSigned -File "' + $workerFile + '" -RepositoryPath "' + $repo + '" -Action Check' + $roleArgument
+}
+function New-MonitorDirectory {
+    $null = New-Item -ItemType Directory -Path $root -Force
+    if (((Get-Item -LiteralPath $root).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Monitor directory cannot be a reparse point.' }
+    $acl=Get-Acl -LiteralPath $root
+    $owner=[Security.Principal.SecurityIdentifier]::new($sid)
+    $acl.SetOwner($owner); $acl.SetAccessRuleProtection($true,$false)
+    foreach ($rule in @($acl.Access)) { $acl.RemoveAccessRuleSpecific($rule) }
+    foreach ($identity in @($owner,[Security.Principal.SecurityIdentifier]::new('S-1-5-18'))) {
+        $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($identity,'FullControl','ContainerInherit, ObjectInherit','None','Allow'))
+    }
+    Set-Acl -LiteralPath $root -AclObject $acl
+}
+function Assert-PrimaryMonitorTask {
+    [xml]$xml=Export-ScheduledTask -TaskName $taskName -TaskPath '\'
+    $ns=[Xml.XmlNamespaceManager]::new($xml.NameTable)
+    $ns.AddNamespace('t','http://schemas.microsoft.com/windows/2004/02/mit/task')
+    $principal=$xml.SelectSingleNode('/t:Task/t:Principals/t:Principal',$ns)
+    $ownerSid=$principal.UserId
+    if ($ownerSid -notlike 'S-1-*') { $ownerSid=[Security.Principal.NTAccount]::new($ownerSid).Translate([Security.Principal.SecurityIdentifier]).Value }
+    $exec=$xml.SelectNodes('/t:Task/t:Actions/t:Exec',$ns)
+    $triggers=$xml.SelectNodes('/t:Task/t:Triggers/*',$ns)
+    $settings=$xml.SelectSingleNode('/t:Task/t:Settings',$ns)
+    $duration=$xml.SelectSingleNode('/t:Task/t:Triggers/t:TimeTrigger/t:Repetition/t:Duration',$ns)
+    $effective=Get-ScheduledTask -TaskName $taskName -TaskPath '\'
+    if ($ownerSid -ne $sid -or $principal.LogonType -ne 'InteractiveToken' -or [string]$effective.Principal.RunLevel -ne 'Limited' -or $exec.Count -ne 1 -or $exec[0].Command -ne $powershell -or $exec[0].Arguments -cne (Get-MonitorArguments) -or $exec[0].WorkingDirectory -ne $repo -or $triggers.Count -ne 1 -or $triggers[0].LocalName -ne 'TimeTrigger' -or [Xml.XmlConvert]::ToTimeSpan($triggers[0].Repetition.Interval).TotalMinutes -ne 5 -or $null -ne $duration -or [Xml.XmlConvert]::ToTimeSpan($settings.ExecutionTimeLimit).TotalMinutes -ne 2 -or $settings.StartWhenAvailable -ne 'true') { throw 'Prepared Primary monitor task definition changed. No task was enabled.' }
 }
 function Send-MonitorMessage([string]$Content) {
     $credential = $null; $url = $null
@@ -91,6 +121,7 @@ function Get-NotificationMessage($Report, [bool]$Recovery=$false) {
     $lines=[Collections.Generic.List[string]]::new()
     if ($Recovery) { $lines.Add('[RECOVERY] PC2 MySQL 백업 정상화') }
     else { $lines.Add('[ALERT] PC2 MySQL 백업 이상') }
+    if ($SourceRole -eq 'Primary') { $lines.Add('백업 역할: PC2 Primary') }
     $lines.Add('확인 시각: '+(Format-MessageTime $Report.CheckedUtc))
     if ($Recovery) { $lines.Add('백업 감시 항목이 정상 상태로 돌아왔습니다.') }
     else {
@@ -140,6 +171,7 @@ function Get-BackupHealth {
     catch { $issues.Add('backup-task-unavailable') }
     try {
         $last = Read-MonitorJson (Join-Path $scheduler 'last-run.json')
+        if ($SourceRole -eq 'Primary' -and ($null -eq $last.PSObject.Properties['SourceRole'] -or $last.SourceRole -cne 'Primary')) { throw 'Wrong backup record role.' }
         $started = Read-UtcTime $last.StartedUtc
         if ($started -gt $now.AddMinutes(5)) { throw 'Future timestamp.' }
         $runStartedUtc=$started.ToString('o')
@@ -165,6 +197,7 @@ function Get-BackupHealth {
     catch { $issues.Add('backup-run-record-invalid') }
     try {
         $success = Read-MonitorJson (Join-Path $scheduler 'last-success.json')
+        if ($SourceRole -eq 'Primary' -and ($null -eq $success.PSObject.Properties['SourceRole'] -or $success.SourceRole -cne 'Primary')) { throw 'Wrong success record role.' }
         $completed = Read-UtcTime $success.CompletedUtc
         $started = Read-UtcTime $success.StartedUtc
         if ($success.Status -ne 'success' -or $success.ExitCode -ne 0 -or $completed -lt $started -or $completed -gt $now.AddMinutes(5)) { throw 'Invalid success record.' }
@@ -180,7 +213,39 @@ function Get-BackupHealth {
     [PSCustomObject]@{CheckedUtc=$now.ToString('o'); Status=$status; Issues=@($issues.ToArray() | Sort-Object -Unique); LastSuccessUtc=$successUtc; LastRunStartedUtc=$runStartedUtc; LastRunCompletedUtc=$runCompletedUtc; RunningStartedUtc=$runningStartedUtc; Delivery='not-needed'}
 }
 
+if ($Action -eq 'Prepare') {
+    if ($SourceRole -ne 'Primary') { throw 'Prepare is only for a separate disabled Primary monitor.' }
+    $backupConfig=Read-MonitorJson (Join-Path $scheduler 'config.json')
+    if ($backupConfig.OwnerSid -ne $sid -or $backupConfig.RepositoryPath -ne $repo -or $backupConfig.TaskName -ne $backupTaskName -or $backupConfig.SourceRole -cne 'Primary') { throw 'Prepare the Primary backup schedule first with the original PC2 user.' }
+    if (-not (Test-Path -LiteralPath $configFile)) {
+        if (Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction SilentlyContinue) { throw 'Primary monitor task already exists without this configuration.' }
+        $originalRoot=Join-Path $replicaRoot 'discord-monitor'
+        $originalConfig=Read-MonitorJson (Join-Path $originalRoot 'config.json')
+        $originalCredential=Join-Path $originalRoot 'webhook.clixml'
+        if ($originalConfig.OwnerSid -ne $sid -or $originalConfig.RepositoryPath -ne $repo -or ((Get-Item -LiteralPath $originalCredential).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Original Replica webhook identity changed.' }
+        $credential=Import-Clixml -LiteralPath $originalCredential
+        if ($credential -isnot [Management.Automation.PSCredential] -or $credential.UserName -cne 'discord-webhook') { throw 'Original encrypted webhook is unavailable.' }
+        $credential=$null
+        New-MonitorDirectory
+        Copy-Item -LiteralPath $originalCredential -Destination $credentialFile
+        Copy-Item -LiteralPath $PSCommandPath -Destination $workerFile
+        Write-MonitorJson $configFile ([PSCustomObject]@{Format='loop-mysql84-discord-v1'; SourceRole='Primary'; ActivationPending=$true; OwnerSid=$sid; RepositoryPath=$repo; WorkerSha256=(Get-FileHash -LiteralPath $workerFile).Hash; StaleMinutes=90; RunningMinutes=12; ReminderMinutes=60})
+    }
+    $config=Read-MonitorConfig
+    if (-not (Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction SilentlyContinue)) {
+        $taskAction=New-ScheduledTaskAction -Execute $powershell -Argument (Get-MonitorArguments) -WorkingDirectory $repo
+        $trigger=New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(1)) -RepetitionInterval (New-TimeSpan -Minutes 5)
+        $principal=New-ScheduledTaskPrincipal -UserId $sid -LogonType Interactive -RunLevel Limited
+        $settings=New-ScheduledTaskSettingsSet -Disable -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 2) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+        $null=Register-ScheduledTask -TaskName $taskName -TaskPath '\' -Action $taskAction -Trigger $trigger -Principal $principal -Settings $settings -Description 'Prepared Primary backup monitor; disabled until Primary backup validation and explicit activation.'
+    }
+    Assert-PrimaryMonitorTask
+    if (-not $config.ActivationPending -or (Get-ScheduledTask -TaskName $taskName -TaskPath '\').State -ne 'Disabled') { throw 'Primary monitor is not in the prepared/disabled state. No task was disabled or replaced.' }
+    Write-Host 'PASS: Primary Discord monitor prepared DISABLED. Existing Replica monitor unchanged. No message or DB change performed.'
+    return
+}
 if ($Action -eq 'SaveWebhook') {
+    if ($SourceRole -eq 'Primary') { throw 'Use Prepare to reuse the encrypted Replica webhook without replacing it.' }
     # Reuse the existing installation's Windows identity; never read a DB password.
     $backupConfig = Read-MonitorJson (Join-Path $scheduler 'config.json')
     if ($backupConfig.OwnerSid -ne $sid -or $backupConfig.RepositoryPath -ne $repo -or $backupConfig.TaskName -ne $backupTaskName) { throw 'Use the original PC2 Windows backup user and repository.' }
@@ -234,7 +299,8 @@ if ($Action -eq 'Update') {
     return
 }
 if ($Action -eq 'TestAlert') {
-    Send-MonitorMessage ("[TEST] PC2 MySQL 백업 알림 전송 시험`n전송 시각: "+(Format-MessageTime ([DateTime]::UtcNow.ToString('o')))+"`nDiscord 알림 전송을 확인하는 시험입니다. 실제 백업 실패나 DB 변경은 발생시키지 않았습니다.")
+    $roleLabel=if ($SourceRole -eq 'Primary') { 'PC2 MySQL Primary' } else { 'PC2 MySQL' }
+    Send-MonitorMessage ("[TEST] $roleLabel 백업 알림 전송 시험`n전송 시각: "+(Format-MessageTime ([DateTime]::UtcNow.ToString('o')))+"`nDiscord 알림 전송을 확인하는 시험입니다. 실제 백업 실패나 DB 변경은 발생시키지 않았습니다.")
     Write-MonitorJson $receiptFile ([PSCustomObject]@{DeliveredUtc=[DateTime]::UtcNow.ToString('o'); Kind='test-only'; WorkerSha256=$config.WorkerSha256})
     Write-Host 'PASS: Discord confirmed the TEST message. Verify it in the selected channel.'
     return
@@ -243,6 +309,16 @@ if ($Action -eq 'Install') {
     $receipt=Read-MonitorJson $receiptFile
     $tested=Read-UtcTime $receipt.DeliveredUtc
     if ($receipt.Kind -ne 'test-only' -or $tested -lt [DateTime]::UtcNow.AddDays(-1) -or $tested -gt [DateTime]::UtcNow.AddMinutes(5) -or $null -eq $receipt.PSObject.Properties['WorkerSha256'] -or $receipt.WorkerSha256 -ine $config.WorkerSha256) { throw 'Run TestAlert successfully with the current worker before installing the monitor.' }
+    if ($SourceRole -eq 'Primary') {
+        Assert-PrimaryMonitorTask
+        $health=Get-BackupHealth
+        if ($health.Status -ne 'healthy') { throw 'Primary monitor activation requires a healthy real Primary scheduled backup. Task remains disabled.' }
+        $config.ActivationPending=$false
+        Write-MonitorJson $configFile $config
+        $null=Enable-ScheduledTask -TaskName $taskName -TaskPath '\'
+        Write-Host 'PASS: Primary monitor activated after confirmed test delivery and healthy Primary backup records.'
+        return
+    }
     if (Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction SilentlyContinue) { throw 'Monitor task already exists. Run Status; no task was replaced.' }
     $taskAction=New-ScheduledTaskAction -Execute $powershell -Argument (Get-MonitorArguments) -WorkingDirectory $repo
     $trigger=New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(1)) -RepetitionInterval (New-TimeSpan -Minutes 5)
@@ -253,6 +329,7 @@ if ($Action -eq 'Install') {
     return
 }
 if ($Action -eq 'Status') {
+    if ($SourceRole -eq 'Primary') { Write-Host ('Primary activation pending: '+$config.ActivationPending) }
     $task=Get-ScheduledTask -TaskName $taskName -TaskPath '\' -ErrorAction SilentlyContinue
     if ($task) {
         $info=Get-ScheduledTaskInfo -TaskName $taskName -TaskPath '\'
@@ -262,6 +339,8 @@ if ($Action -eq 'Status') {
     if (Test-Path -LiteralPath $incidentFile) { Read-MonitorJson $incidentFile | Format-List Open,Issues,LastSentUtc }
     return
 }
+
+if ($SourceRole -eq 'Primary' -and $config.ActivationPending) { throw 'Primary monitor is prepared only. Check is blocked until Primary backup validation and Install.' }
 
 try { $lock=[IO.File]::Open((Join-Path $root 'check.lock'),'OpenOrCreate','ReadWrite','None') }
 catch { throw 'Another monitor check is running.' }

@@ -91,6 +91,8 @@ NodePort `30050`은 폐기하고 `30500`으로 통일한다. NodePort는 승인�
 
 ## 6. 공개·관리·자동화 경로
 
+> 아래 VLAN/VIP/loopback 주소는 최초 설계 기록입니다. 현재 학원망의 ADMIN 세션 접근은 [ADMIN 절차](../runbooks/academy-admin-access.md), PC2 n8n의 내부 API 전용 10443 준비안은 [자동화 입구 절차](../runbooks/academy-automation-ingress.md)를 우선 참조합니다. 일반 443의 `/api/internal/*` 차단은 유지하며, 전용 자동화 입구는 실제 랩 검증 전까지 완료로 간주하지 않습니다.
+
 - 고객 주소: `https://portal.telecom.test` → 웹 VIP. 실습 CA 인증서를 사용하고 개발 PC에 신뢰를 설정한다. 실습 DNS는 pfSense Resolver에서 관리한다.
 - 관리자 주소: `https://manage1.telecom.test`, `https://manage2.telecom.test` → 각 PC VLAN50 주소. VPN/승인 관리망에서만 접근한다. 한쪽 장애 시 다른 주소로 접속하고 필요하면 다시 로그인한다.
 - 공개 Nginx는 `/admin`, `/admin/`, `/api/admin`, `/api/admin/`, `/api/internal`, `/api/internal/`를 일관되게 거부한다. 경로 정규화·하위 경로 우회도 시험한다.
