@@ -19,6 +19,7 @@ const SERVICE_MENU: [string, string][] = [
 const SECURITY_MENU: [string, string][] = [
   ['/admin/incidents', '보안 인시던트'],
   ['/admin/ip-blocks', '차단 IP'],
+  ['/admin/account-locks', '차단 계정'],
   ['/admin/privileges', '권한 점검'],
   ['/admin/automation', '자동화 현황'],
   ['/admin/grafana', '관제 지표'],
@@ -63,6 +64,7 @@ export default function AdminLayout() {
           </>}
         </Dropdown>
         <div className="topnav__actions">
+          <Link to="/" className="btn btn--ghost btn--sm admin-customer-link">사용자 페이지</Link>
           <ThemeToggle />
           <Dropdown label={`${user?.name ?? ''}님`} className="topnav__user">
             {(close) => (

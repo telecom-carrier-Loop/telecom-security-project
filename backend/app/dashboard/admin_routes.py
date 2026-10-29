@@ -16,6 +16,7 @@ from ..extensions import db
 from ..models import (AuthLoginFailure, Invoice, MembershipAccount, Payment, SecurityIncident, SupportTicket,
                       User)
 from ..payments.routes import payment_dict
+from ..membership.tiers import customer_rank, tier_name
 from ..plans.routes import my_active_subscription
 from ..support.routes import mask_email
 from ..models.base import utcnow
@@ -68,6 +69,23 @@ def dashboard():
 # ---------- 회원 목록 (ADMIN) ----------
 # 목록에는 이메일을 가려서 보여주고, 상세를 열 때만 전체를 보여주며 열람 기록을 남긴다 (최소 노출).
 
+@bp.get("/account-locks")
+@roles_required(ROLE_ADMIN)
+def account_locks():
+    try:
+        page = max(int(request.args.get("page", 1)), 1)
+    except ValueError:
+        page = 1
+    query = User.query.filter(User.locked_at.isnot(None), User.is_active.is_(True))
+    q = (request.args.get("q") or "").strip()[:50]
+    if q:
+        query = query.filter(or_(User.name.like(f"%{q}%"), User.email.like(f"%{q}%")))
+    total, size = query.count(), 20
+    rows = query.order_by(User.locked_at.desc(), User.id.desc()).offset((page - 1) * size).limit(size).all()
+    return ok({"accounts": [{"id": u.id, "name": u.name, "email": mask_email(u.email), "role": u.role,
+                             "locked_at": _iso(u.locked_at), "lock_reason": u.lock_reason} for u in rows],
+               "page": page, "size": size, "total": total})
+
 @bp.get("/customers")
 @roles_required(ROLE_ADMIN)
 def customers():
@@ -101,7 +119,7 @@ def customers():
             "login_failures_15m": _failures_15m(u.email),
             "created_at": _iso(u.created_at), "last_login_at": _iso(u.last_login_at),
             "plan": sub.plan.name if sub else None,
-            "membership": account.tier.name if account else None,
+            "membership": tier_name(account.tier) if account else None,
             "unpaid_amount": _unpaid(u.id),
             "open_tickets": SupportTicket.query.filter(SupportTicket.user_id == u.id,
                                                        SupportTicket.status.in_(("OPEN", "IN_PROGRESS"))).count(),
@@ -128,7 +146,7 @@ def customer_detail(user_id):
         "created_at": _iso(u.created_at), "last_login_at": _iso(u.last_login_at),
         "subscription": None if not sub else {"phone_number": sub.phone_number, "plan": sub.plan.to_dict(),
                                               "started_on": sub.started_on.isoformat()},
-        "membership": None if not account else {"tier": account.tier.name, "point_balance": account.point_balance},
+        "membership": None if not account else {"tier": tier_name(account.tier), "rank": customer_rank(account.tier.rank), "point_balance": account.point_balance},
         "unpaid_amount": _unpaid(u.id),
         "invoices": [i.to_dict() for i in invoices],
         "tickets": [{"id": t.id, "title": t.title, "status": t.status, "created_at": _iso(t.created_at)} for t in tickets],

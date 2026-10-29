@@ -18,6 +18,7 @@ from ..core.validation import body, idempotency_conflict, idempotency_key, reque
 from ..extensions import db
 from ..models import MembershipAccount, ShopItem, ShopOrder
 from .service import add_points, locked_account
+from .tiers import customer_rank, tier_name
 
 bp = Blueprint("shop", __name__, url_prefix="/api")
 CATEGORIES = ("GOODS", "DATA", "COUPON")
@@ -25,9 +26,9 @@ CATEGORIES = ("GOODS", "DATA", "COUPON")
 
 def item_dict(i: ShopItem, rank=None) -> dict:
     return {"id": i.id, "name": i.name, "description": i.description, "category": i.category,
-            "price_points": i.price_points, "stock": i.stock, "min_tier_rank": i.min_tier_rank,
+            "price_points": i.price_points, "stock": i.stock, "min_tier_rank": customer_rank(i.min_tier_rank),
             "is_active": i.is_active, "sold_out": i.stock == 0,
-            "available": None if rank is None else (i.is_active and i.stock != 0 and rank >= i.min_tier_rank)}
+            "available": None if rank is None else (i.is_active and i.stock != 0 and customer_rank(rank) >= customer_rank(i.min_tier_rank))}
 
 
 def order_dict(o: ShopOrder) -> dict:
@@ -43,7 +44,7 @@ def shop_items():
     rows = ShopItem.query.filter_by(is_active=True).order_by(ShopItem.min_tier_rank, ShopItem.price_points).all()
     return ok({"items": [item_dict(i, rank if rank is not None else -1) for i in rows],
                "balance": account.point_balance if account else None,
-               "tier": {"name": account.tier.name, "rank": account.tier.rank} if account else None})
+               "tier": {"name": tier_name(account.tier), "rank": customer_rank(account.tier.rank)} if account else None})
 
 
 @bp.get("/membership/shop/orders")
@@ -70,7 +71,7 @@ def purchase(item_id):
     item = ShopItem.query.filter_by(id=item_id, is_active=True).first()
     if item is None:
         raise not_found("상품을 찾을 수 없습니다.")
-    if account.tier.rank < item.min_tier_rank:
+    if customer_rank(account.tier.rank) < customer_rank(item.min_tier_rank):
         security_event("membership.redeem.denied", "low", "등급 미달 상품 교환 시도", user_id=user.id,
                        shop_item_id=item.id, reason="tier")
         raise ApiError("TIER_REQUIRED", "현재 등급으로는 교환할 수 없는 상품입니다.", 403)
@@ -123,8 +124,8 @@ def _clean_item(data: dict, partial=False) -> dict:
         out["stock"] = s
     if "min_tier_rank" in data:
         r = data.get("min_tier_rank")
-        if not isinstance(r, int) or isinstance(r, bool) or not 0 <= r <= 3:
-            errors["min_tier_rank"] = "등급은 0(Basic)~3(VIP)입니다."
+        if not isinstance(r, int) or isinstance(r, bool) or not 0 <= r <= 2:
+            errors["min_tier_rank"] = "등급은 0(일반유저)~2(VIP)입니다."
         out["min_tier_rank"] = r
     if "category" in data:
         if data.get("category") not in CATEGORIES:

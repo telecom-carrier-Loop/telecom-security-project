@@ -15,6 +15,7 @@ from ..core.permissions import object_denied
 from ..core.validation import idempotency_conflict, request_hash
 from ..extensions import db
 from ..membership.service import add_points, locked_account, payment_points
+from ..membership.tiers import customer_tier, tier_name
 from ..models import Invoice, Payment, PaymentEvent, PointTransaction
 import re
 
@@ -110,7 +111,7 @@ def _mark_succeeded(payment, invoice, user_id, detail=None):
     account = locked_account(user_id)
     points = payment_points(account, invoice.amount)
     if account and points:
-        add_points(account, points, "EARN", f"{invoice.period} 요금 납부 적립 ({account.tier.name} {account.tier.earn_rate_bp / 100:g}%)",
+        add_points(account, points, "EARN", f"{invoice.period} 요금 납부 적립 ({tier_name(account.tier)} {customer_tier(account.tier).earn_rate_bp / 100:g}%)",
                    f"payment:{payment.id}")
 
 

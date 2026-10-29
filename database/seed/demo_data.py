@@ -87,8 +87,8 @@ def _reference_data():
             ("5G_PREMIUM", "5G Premium", 85000, -1, "5G")]])
     if not MembershipTier.query.first():
         db.session.add_all([MembershipTier(code=c, name=n, min_monthly_fee=f, rank=r, earn_rate_bp=EARN_RATE_BP[c]) for c, n, f, r in [
-            ("BASIC", "Basic", 0, 0), ("SILVER", "Silver", 35000, 1),
-            ("GOLD", "Gold", 60000, 2), ("VIP", "VIP", 85000, 3)]])
+            ("BASIC", "일반유저", 0, 0), ("SILVER", "Plus", 35000, 1),
+            ("GOLD", "VIP", 60000, 2), ("VIP", "Admin", 85000, 3)]])
     if not Benefit.query.first():
         db.session.add_all([
             Benefit(name="편의점 2,000원 할인", partner="가상편의점", required_points=2000, min_tier_rank=0),

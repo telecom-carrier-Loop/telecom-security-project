@@ -1,3 +1,4 @@
+import { MEMBERSHIP_TIERS } from '../../utils/membership'
 import { useState, type FormEvent } from 'react'
 import ErrorState from '../../components/common/ErrorState'
 import Loading from '../../components/common/Loading'
@@ -6,7 +7,7 @@ import { ApiError, api } from '../../services/apiClient'
 import type { ShopItem } from '../../services/types'
 import { useApi } from '../../utils/useApi'
 
-const TIERS = ['Basic', 'Silver', 'Gold', 'VIP']
+const TIERS = MEMBERSHIP_TIERS
 const EMPTY = { name: '', description: '', category: 'GOODS', price_points: 1000, stock: '', min_tier_rank: 0 }
 
 // 포인트 상점 상품 관리 (잔액 직접 수정 기능은 두지 않는다)

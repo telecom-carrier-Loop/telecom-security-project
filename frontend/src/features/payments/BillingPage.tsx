@@ -15,7 +15,6 @@ const methodLabel = (m: string) => (m === 'KAKAOPAY' ? '카카오페이 (테스�
 export default function BillingPage() {
   const invoices = useApi<{ invoices: Invoice[] }>('/invoices/me')
   const payments = useApi<{ payments: Payment[] }>('/payments/me')
-  const methods = useApi<{ mock_card: boolean; kakaopay: boolean }>('/payments/methods')
   const cards = useApi<{ cards: { number: string; result: string }[] }>('/payments/test-cards')
   const [paying, setPaying] = useState<Invoice | null>(null)
   const [card, setCard] = useState('4242424242424242')
@@ -28,18 +27,7 @@ export default function BillingPage() {
 
   const open = (inv: Invoice) => { setPaying(inv); setResult(null); keyRef.current = newIdempotencyKey() }
 
-  // 카카오페이 테스트 결제: 서버가 결제 준비 → 카카오페이 화면으로 이동 → 돌아오면 /billing/kakaopay/approve
-  const kakaoPay = async (inv: Invoice) => {
-    setBusy(true); setResult(null)
-    try {
-      const d = await api<{ redirect_url: string }>('/payments/kakaopay/ready', {
-        method: 'POST', headers: { 'Idempotency-Key': newIdempotencyKey() }, body: { invoice_id: inv.id } })
-      window.location.assign(d.redirect_url)
-    } catch (err) {
-      setResult({ type: 'error', text: (err as ApiError).message })
-      setBusy(false)
-    }
-  }
+  const kakaoPay = () => window.alert('결제 시스템은 준비중 입니다.')
 
   const pay = async (e: FormEvent) => {
     e.preventDefault()
@@ -101,9 +89,7 @@ export default function BillingPage() {
           ) : (
             <div className="row">
               <button className="btn" onClick={() => open(inv)}>테스트 카드로 납부</button>
-              {methods.data?.kakaopay && (
-                <button className="btn btn--kakao" disabled={busy} onClick={() => kakaoPay(inv)}>카카오페이 (테스트)</button>
-              )}
+              <button type="button" className="btn btn--kakao" disabled={busy} onClick={kakaoPay}>카카오페이</button>
             </div>
           )}
         </article>

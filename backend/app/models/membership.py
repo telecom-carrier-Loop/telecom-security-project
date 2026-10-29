@@ -9,11 +9,11 @@ class MembershipTier(TimestampMixin, db.Model):
     __tablename__ = "membership_tiers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)  # BASIC/SILVER/GOLD/VIP
+    code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)  # 기존 DB 코드 보존. 표시·공개 코드는 membership/tiers.py 참고
     name: Mapped[str] = mapped_column(String(30), nullable=False)
     min_monthly_fee: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 등급 조건 예시
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
-    # 등급별 요금 납부 적립률 (basis point: 100 = 1%). BASIC 0.5% · SILVER 1% · GOLD 2% · VIP 3%
+    # rank 0(일반유저) · 1(Plus) · 2(VIP). 과거 rank 3은 고객 정책에서 VIP로 호환한다.
     earn_rate_bp: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
 
 
@@ -60,7 +60,7 @@ class Benefit(TimestampMixin, db.Model):
 
     def to_dict(self) -> dict:
         return {"id": self.id, "name": self.name, "partner": self.partner, "required_points": self.required_points,
-                "min_tier_rank": self.min_tier_rank, "monthly_limit": self.monthly_limit, "is_active": self.is_active}
+                "min_tier_rank": min(self.min_tier_rank, 2), "monthly_limit": self.monthly_limit, "is_active": self.is_active}
 
 
 class BenefitRedemption(TimestampMixin, db.Model):

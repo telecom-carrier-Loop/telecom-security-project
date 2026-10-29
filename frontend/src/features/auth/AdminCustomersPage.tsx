@@ -7,6 +7,7 @@ import { ApiError, api } from '../../services/apiClient'
 import type { AccountStatus, CustomerRow } from '../../services/types'
 import { compactDateTime, won } from '../../utils/format'
 import { useApi } from '../../utils/useApi'
+import { customerMembershipName } from '../../utils/membership'
 
 const STATUS: Record<AccountStatus, [string, Tone]> = {
   ACTIVE: ['정상', 'ok'], LOCKED: ['잠김', 'danger'], DEACTIVATED: ['탈퇴', 'neutral'],
@@ -78,7 +79,7 @@ export default function AdminCustomersPage() {
                   <th><input type="checkbox" aria-label="전체 선택" checked={selectable.length > 0 && selected.length === selectable.length}
                              onChange={(e) => setSelected(e.target.checked ? selectable.map((c) => c.id) : [])} /></th>
                   <th>이름</th><th>이메일</th><th>상태</th><th className="num">15분 로그인 실패</th><th>잠금 시각</th><th>잠금 사유</th>
-                  <th>요금제</th><th className="num">미납</th><th>동작</th>
+                  <th>요금제</th><th>멤버십</th><th className="num">미납</th><th>동작</th>
                 </tr></thead>
                 <tbody>
                   {data.customers.map((c) => (
@@ -92,6 +93,7 @@ export default function AdminCustomersPage() {
                       <td>{c.locked_at ? compactDateTime(c.locked_at) : '-'}</td>
                       <td className="wrap">{c.lock_reason ?? '-'}</td>
                       <td>{c.plan ?? <span className="muted">없음</span>}</td>
+                      <td><div className="row customer-tier-cell"><Link className="btn btn--sm btn--ghost" to={`/admin/customers/${c.id}#membership-tier`}>등급 변경</Link><span>{c.membership ? customerMembershipName(c.membership) : '일반유저 (미가입)'}</span></div></td>
                       <td className="num">{c.unpaid_amount ? won(c.unpaid_amount) : '-'}</td>
                       <td><div className="row">
                         {c.status === 'ACTIVE' && <button className="btn btn--sm btn--ghost" onClick={() => lock(c)}>잠금</button>}

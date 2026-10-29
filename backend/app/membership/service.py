@@ -15,18 +15,19 @@ from ..extensions import db
 from ..models import Benefit, BenefitRedemption, MembershipAccount, MembershipTier, PointTransaction
 from ..models.base import utcnow
 from ..plans.routes import my_active_subscription
+from .tiers import customer_rank, customer_tier
 
 WELCOME_POINTS = 1000
 
 
 def payment_points(account: MembershipAccount, amount: int) -> int:
     """요금 납부 적립 포인트 — 등급별 적립률(earn_rate_bp, 100 = 1%). 소수점 이하는 버린다."""
-    rate = account.tier.earn_rate_bp if account and account.tier else 0
+    rate = customer_tier(account.tier).earn_rate_bp if account and account.tier else 0
     return amount * rate // 10000
 
 
 def tier_for_fee(monthly_fee: int):
-    return (MembershipTier.query.filter(MembershipTier.min_monthly_fee <= monthly_fee)
+    return (MembershipTier.query.filter(MembershipTier.min_monthly_fee <= monthly_fee, MembershipTier.rank < 3)
             .order_by(MembershipTier.rank.desc()).first())
 
 
@@ -94,7 +95,7 @@ def redeem(user, benefit_id: int, key: str):
     benefit = db.session.get(Benefit, benefit_id)
     if benefit is None or not benefit.is_active:
         raise ApiError("NOT_FOUND", "혜택을 찾을 수 없습니다.", 404)
-    if account.tier.rank < benefit.min_tier_rank:
+    if customer_rank(account.tier.rank) < customer_rank(benefit.min_tier_rank):
         raise _denied(user, benefit_id, "tier_too_low", "TIER_TOO_LOW", "현재 등급에서는 사용할 수 없는 혜택입니다.", 403)
     if used_this_month(user.id, benefit.id) >= benefit.monthly_limit:
         raise _denied(user, benefit_id, "monthly_limit", "LIMIT_REACHED", "이번 달 사용 횟수를 모두 썼습니다.", 409)

@@ -6,6 +6,7 @@ import ServiceIcon, { type ServiceIconName } from '../../components/common/Servi
 import type { DashboardSummary, Notice, Plan, ShopItem } from '../../services/types'
 import { STATUS_LABEL, dataSize, dateTime, shortDate, won } from '../../utils/format'
 import { useApi } from '../../utils/useApi'
+import { customerMembershipName } from '../../utils/membership'
 
 const CAMPAIGNS = [
   { title: <>나의 하루에<br />딱 맞는 연결.</>, text: '요금제부터 이용현황까지, 나에게 맞는 통신 생활을 만나보세요.', to: '/plans', action: '요금제 알아보기', tone: 'lilac' },
@@ -45,7 +46,7 @@ export default function HomePage() {
       <div className="my-overview__welcome"><span>반가워요, {user.name}님</span><h2>나의 통신 생활</h2><p>{subscription ? subscription.plan.name : '가입한 회선이 없습니다'}</p><span className="muted">{subscription?.phone_number}</span><Link to="/usage">MY 전체 보기 <span aria-hidden="true">→</span></Link></div>
       <Link to="/usage" className="overview-stat"><span>남은 데이터</span><strong>{!subscription ? '회선 없음' : !usage ? '수집 대기' : unlimited ? '무제한' : dataSize(left ?? 0)}</strong><span className="data-track" aria-hidden="true"><span style={{ width: `${ratio * 100}%` }} /></span><small>{usage ? unlimited ? '데이터 무제한 요금제' : `기본 제공 ${dataSize(usage.data_limit_mb)}` : '이용현황에서 자세히 보기'}</small></Link>
       <Link to="/billing" className="overview-stat"><span>이번 달 납부할 요금</span><strong>{won(billing.amount_due)}</strong><small>{billing.next_due_date ? `${shortDate(billing.next_due_date)}까지 납부` : '미납 요금이 없어요'}</small><span className="overview-stat__action">요금 조회·납부 →</span></Link>
-      <Link to="/membership" className="overview-stat"><span>{membership ? `L∞P+ ${membership.tier}` : 'L∞P+ 멤버십'}</span><strong>{membership ? `${membership.point_balance.toLocaleString()}P` : '미가입'}</strong><small>{membership ? '사용 가능한 포인트' : '멤버십 혜택을 만나보세요'}</small><span className="overview-stat__action">멤버십 보기 →</span></Link>
+      <Link to="/membership" className="overview-stat"><span>{membership ? `L∞P+ ${customerMembershipName(membership.tier)}` : 'L∞P+ 멤버십'}</span><strong>{membership ? `${membership.point_balance.toLocaleString()}P` : '미가입'}</strong><small>{membership ? '사용 가능한 포인트' : '멤버십 혜택을 만나보세요'}</small><span className="overview-stat__action">멤버십 보기 →</span></Link>
     </section>
     <nav className="service-shortcuts" aria-label="자주 찾는 메뉴">{SHORTCUTS.map(([to, label, icon]) => <Link key={to} to={to}><span className="service-shortcuts__icon"><ServiceIcon name={icon} size={30} /></span><span>{label}</span></Link>)}</nav>
     <section className="home-section">

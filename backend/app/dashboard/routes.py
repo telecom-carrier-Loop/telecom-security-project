@@ -5,6 +5,7 @@ from ..core.permissions import current_user, login_required
 from ..core.responses import ok
 from ..models import Invoice, MembershipAccount, Payment, SupportTicket, UsageRecord
 from ..plans.routes import my_active_subscription, usage_dict
+from ..membership.tiers import tier_dict
 
 bp = Blueprint("dashboard", __name__, url_prefix="/api/dashboard")
 
@@ -42,7 +43,7 @@ def summary():
             "unpaid_invoices": [i.to_dict() for i in unpaid],
         },
         "membership": None if not membership else {
-            "tier": membership.tier.name, "tier_code": membership.tier.code,
+            "tier": tier_dict(membership.tier)["name"], "tier_code": tier_dict(membership.tier)["code"],
             "point_balance": membership.point_balance,
         },
         "recent_tickets": [{"id": t.id, "title": t.title, "status": t.status,

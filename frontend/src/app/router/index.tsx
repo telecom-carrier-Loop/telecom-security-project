@@ -15,6 +15,7 @@ import AdminAutomationPage from '../../features/incidents/AdminAutomationPage'
 import AdminGrafanaPage from '../../features/incidents/AdminGrafanaPage'
 import AdminAutomationLogsPage from '../../features/incidents/AdminAutomationLogsPage'
 import AdminIpBlocksPage from '../../features/incidents/AdminIpBlocksPage'
+import AdminAccountLocksPage from '../../features/incidents/AdminAccountLocksPage'
 import AdminPrivilegesPage from '../../features/incidents/AdminPrivilegesPage'
 import AdminBenefitsPage from '../../features/membership/AdminBenefitsPage'
 import MembershipPage from '../../features/membership/MembershipPage'
@@ -76,6 +77,7 @@ export const router = createBrowserRouter([
         { path: 'shop', element: <AdminShopPage /> },
         { path: 'notices', element: <AdminNoticesPage /> },
         { path: 'ip-blocks', element: <AdminIpBlocksPage /> },
+        { path: 'account-locks', element: <AdminAccountLocksPage /> },
         { path: 'privileges', element: <AdminPrivilegesPage /> },
         { path: 'automation', element: <AdminAutomationPage /> },
         { path: 'grafana', element: <AdminGrafanaPage /> },
