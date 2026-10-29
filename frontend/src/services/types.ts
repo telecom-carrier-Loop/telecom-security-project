@@ -94,7 +94,7 @@ export type Membership =
   | {
       joined: true
       tier: { code: string; name: string; rank: number; earn_rate_bp: number }
-      tiers: { name: string; rank: number; earn_rate_bp: number; min_monthly_fee: number }[]
+      tiers: { name: string; rank: number; earn_rate_bp: number; min_monthly_fee: number; admin_only?: boolean }[]
       next_tier: { name: string; min_monthly_fee: number } | null
       point_balance: number
       joined_at: string
@@ -205,7 +205,7 @@ export interface CustomerDetail {
   created_at: string
   last_login_at: string | null
   subscription: { phone_number: string; plan: Plan; started_on: string } | null
-  membership: { tier: string; point_balance: number } | null
+  membership: { tier: string; rank: number; point_balance: number } | null
   unpaid_amount: number
   invoices: Invoice[]
   tickets: { id: number; title: string; status: TicketStatus; created_at: string }[]

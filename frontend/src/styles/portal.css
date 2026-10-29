@@ -28,6 +28,57 @@ input::placeholder,textarea::placeholder { color:var(--ink-soft); opacity:1; }
 .panel--hero { background:var(--info-bg); border-color:var(--info-line); }
 .page>.panel+.panel { margin-top:24px; }
 .page__header { flex-wrap:wrap; }
+.membership-tier-editor { margin-bottom:24px; }
+.quick a.chip--on { background:var(--chip-on-bg); color:var(--chip-on-ink); border-color:var(--chip-on-bg); }
+.admin-customer-link { white-space:nowrap; }
+.customer-tier-cell { flex-wrap:nowrap; white-space:nowrap; gap:12px; }
+#membership-tier { scroll-margin-top:24px; }
+/* 멤버십 페이지 안에서만 사용하는 우측 고정 안내와 유연한 본문. */
+.membership-columns { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:24px; align-items:start; }
+.membership-content { display:flex; flex-direction:column; gap:28px; min-width:0; }
+.membership-content>section,.membership-content>article { min-width:0; }
+.membership-points { gap:12px; }
+.membership-points__balance { margin:4px 0; font-size:2.75rem; font-weight:700; line-height:1.25; letter-spacing:-.035em; }
+.membership-points__balance small { margin-left:8px; font-size:1rem; font-weight:500; color:var(--ink-soft); }
+.membership-rate-sidebar { position:sticky; top:24px; align-self:start; min-width:0; }
+.membership-rate-sidebar>.panel { padding:20px; gap:16px; }
+.membership-rate-table { display:table; border:0; table-layout:fixed; }
+.membership-rate-table th,.membership-rate-table td { padding:12px 8px; }
+.membership-rate-table th:first-child { width:70%; }
+.membership-rate-table strong { display:block; white-space:nowrap; font-size:.9rem; }
+.membership-rate-table small { display:block; font-size:.72rem; color:var(--ink-soft); line-height:1.6; margin-top:4px; overflow-wrap:anywhere; }
+.membership-rate-sidebar>.panel>.muted { font-size:.8rem; margin:0; }
+.membership-section-title,.membership-section-head h2 { font-size:1.2rem; margin:0 0 12px; }
+.membership-section-head { margin-bottom:18px; }
+.membership-upgrade-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+.membership-upgrade-card { display:flex; flex-direction:column; gap:12px; padding:22px; background:var(--surface); border:1px solid var(--line); border-radius:16px; min-width:0; }
+.membership-upgrade-card--current { border-color:var(--signal); background:var(--info-bg); }
+.membership-upgrade-card header { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.membership-upgrade-card h3 { font-size:1.15rem; margin:0; }
+.membership-upgrade-card__rate { font-size:2rem; font-weight:700; color:var(--signal); margin:2px 0; line-height:1.3; }
+.membership-upgrade-card__rate span { margin-left:4px; font-size:.85rem; font-weight:500; }
+.membership-upgrade-card__price { color:var(--ink-soft); font-size:.8rem; }
+.membership-upgrade-card .btn { margin-top:auto; width:100%; padding-inline:10px; }
+.membership-payment-note { margin-top:16px; font-size:.8rem; }
+.membership-page .cards { grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:18px; }
+.membership-page .cards .card { padding:22px; }
+.membership-page .table-wrap { width:100%; }
+@media(max-width:1100px) {
+  .membership-columns { grid-template-columns:minmax(0,1fr) 270px; gap:20px; }
+  .membership-upgrade-grid { grid-template-columns:1fr; }
+  .membership-upgrade-card { display:grid; grid-template-columns:1fr auto; gap:8px 16px; }
+  .membership-upgrade-card__rate { grid-column:2; grid-row:1/3; align-self:center; }
+  .membership-upgrade-card .btn { grid-column:1/-1; margin-top:8px; }
+}
+@media(max-width:768px) {
+  .membership-columns { grid-template-columns:minmax(0,1fr); }
+  .membership-rate-sidebar { position:static; }
+  .membership-rate-sidebar>.panel { padding:22px; }
+  .membership-rate-table th:first-child { width:auto; }
+  .membership-points__balance { font-size:2.4rem; }
+  .membership-page .page__title { font-size:1.7rem; }
+  .membership-content { gap:24px; }
+}
 .plan-grid { gap:24px; margin-bottom:32px; }
 .plan-card { padding:28px; gap:10px; }
 .plan-card--selected { outline:2px solid var(--signal); outline-offset:-2px; box-shadow:none; }
@@ -156,17 +207,18 @@ input::placeholder,textarea::placeholder { color:var(--ink-soft); opacity:1; }
 .auth-footer { text-align:center; color:var(--ink-soft); padding:24px; font-size:.8rem; border-top:1px solid var(--line); }
 /* 운영 콘솔: 퍼플 계열 탐색과 중립 데이터 면 */
 .shell--admin { padding-left:232px; }
-.admin-sidebar { position:fixed; inset:0 auto 0 0; width:232px; overflow-y:auto; padding:30px 16px; background:var(--bar); color:var(--bar-ink); z-index:40; }
-.admin-sidebar>.brand { padding:0 12px 28px; }
+.admin-sidebar { position:fixed; inset:0 auto 0 0; width:232px; overflow-y:auto; scrollbar-width:none; -ms-overflow-style:none; padding:16px; background:var(--bar); color:var(--bar-ink); z-index:40; }
+.admin-sidebar::-webkit-scrollbar { display:none; width:0; height:0; }
+.admin-sidebar>.brand { padding:0 12px 20px; }
 .admin-sidebar .logo { color:var(--bar-strong); }
 .admin-sidebar .logo__mark { color:var(--bar-mark); }
 .admin-sidebar .logo__suffix { color:var(--bar-ink); }
-.admin-sidebar nav { display:flex; flex-direction:column; gap:4px; }
-.admin-sidebar h2 { color:#c0b9d1; font-size:.75rem; font-weight:500; margin:26px 14px 8px; letter-spacing:.03em; }
-.admin-sidebar .nav__link { min-height:44px; padding:10px 14px; font-size:.875rem; }
+.admin-sidebar nav { display:flex; flex-direction:column; gap:0; }
+.admin-sidebar h2 { color:var(--bar-ink); background:var(--bar-hover); border-radius:6px; padding:6px 10px; font-size:.75rem; font-weight:600; margin:14px 0 6px; letter-spacing:.03em; }
+.admin-sidebar .nav__link { min-height:34px; padding:6px 12px; line-height:1.45; font-size:.875rem; }
 .admin-sidebar .nav__link:hover { background:var(--bar-hover); }
 .admin-sidebar .nav__link.active { background:var(--bar-active); color:var(--bar-strong); font-weight:600; }
-.admin-sidebar__unavailable { color:#c0b9d1; font-size:.8rem; padding:10px 14px; }
+.admin-sidebar__unavailable { color:#c0b9d1; font-size:.8rem; padding:6px 12px; }
 .shell--admin .topnav { background:var(--surface); color:var(--ink); padding:16px 32px; border-bottom:1px solid var(--line); min-height:80px; }
 .shell--admin .topnav .dropdown__btn,.shell--admin .topnav .theme-toggle { color:var(--ink); border-color:var(--control-line); }
 .admin-location { color:var(--ink-soft); font-size:.85rem; }
@@ -272,6 +324,7 @@ input::placeholder,textarea::placeholder { color:var(--ink-soft); opacity:1; }
 }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; transition-duration:.01ms!important; scroll-behavior:auto!important; } }
 @media(pointer:coarse) {
+  .admin-sidebar .nav__link { min-height:44px; display:flex; align-items:center; }
   input:where([type='checkbox'],[type='radio']) { inline-size:24px; block-size:24px; min-inline-size:24px; max-inline-size:24px; min-block-size:24px; }
   .shell--admin .filters .chip,.shell--admin .filters select,.shell--admin .filters input:where(:not([type='checkbox']):not([type='radio'])),.shell--admin .table .btn--sm { min-height:44px; }
 }

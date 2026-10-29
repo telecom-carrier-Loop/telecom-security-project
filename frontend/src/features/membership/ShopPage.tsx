@@ -1,3 +1,4 @@
+import { MEMBERSHIP_TIERS, customerMembershipName } from '../../utils/membership'
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import ErrorState from '../../components/common/ErrorState'
@@ -9,7 +10,7 @@ import { compactDateTime } from '../../utils/format'
 import { newIdempotencyKey } from '../../utils/idempotency'
 import { useApi } from '../../utils/useApi'
 
-const TIER_NAME = ['Basic', 'Silver', 'Gold', 'VIP']
+const TIER_NAME = MEMBERSHIP_TIERS
 const CAT_LABEL: Record<string, string> = { GOODS: '상품', DATA: '데이터', COUPON: '쿠폰' }
 
 // L∞P+ 포인트 상점: 등급별로 교환할 수 있는 상품이 다르다
@@ -46,7 +47,7 @@ export default function ShopPage() {
         <h1 className="page__title">포인트 상점</h1>
         {balance !== null && <span className="figure">{balance.toLocaleString()}P</span>}
       </header>
-      {tier ? <p className="muted">현재 등급 <strong>{tier.name}</strong> · 등급이 높을수록 교환할 수 있는 상품이 많아집니다.</p>
+      {tier ? <p className="muted">현재 등급 <strong>{customerMembershipName(tier.name, tier.rank)}</strong> · 등급이 높을수록 교환할 수 있는 상품이 많아집니다.</p>
         : <div className="notice notice--warn">L∞P+ 멤버십에 가입하면 포인트로 상품을 교환할 수 있습니다. <Link to="/membership">가입하기</Link></div>}
       {msg && <div className={`notice ${msg.ok ? 'notice--ok' : 'notice--warn'}`} role="status">{msg.text}</div>}
 
@@ -55,7 +56,7 @@ export default function ShopPage() {
           const locked = tier !== null && tier.rank < i.min_tier_rank
           return (
             <article key={i.id} className={`panel shop-card ${locked || i.sold_out ? 'shop-card--off' : ''}`}>
-              <div className="row"><Tag tone="info">{CAT_LABEL[i.category]}</Tag>{i.min_tier_rank > 0 && <Tag tone="neutral">{TIER_NAME[i.min_tier_rank]} 이상</Tag>}</div>
+              <div className="row"><Tag tone="info">{CAT_LABEL[i.category]}</Tag>{i.min_tier_rank > 0 && <Tag tone="neutral">{TIER_NAME[Math.min(i.min_tier_rank, 2)]} 이상</Tag>}</div>
               <h2 className="shop-card__name">{i.name}</h2>
               <p className="muted">{i.description}</p>
               <div className="shop-card__foot">
@@ -64,7 +65,7 @@ export default function ShopPage() {
               </div>
               <button className="btn" disabled={!tier || !i.available || busy === i.id || (balance ?? 0) < i.price_points}
                       onClick={() => buy(i)}>
-                {busy === i.id ? '교환 중' : locked ? `${TIER_NAME[i.min_tier_rank]} 등급부터` : i.sold_out ? '품절' :
+                {busy === i.id ? '교환 중' : locked ? `${TIER_NAME[Math.min(i.min_tier_rank, 2)]} 등급부터` : i.sold_out ? '품절' :
                   (balance ?? 0) < i.price_points ? '포인트 부족' : '교환하기'}
               </button>
             </article>

@@ -61,8 +61,8 @@ def seed_data():
         return
 
     tiers = [MembershipTier(code=c, name=n, min_monthly_fee=f, rank=r, earn_rate_bp=EARN_RATE_BP[c]) for c, n, f, r in [
-        ("BASIC", "Basic", 0, 0), ("SILVER", "Silver", 35000, 1),
-        ("GOLD", "Gold", 60000, 2), ("VIP", "VIP", 85000, 3)]]
+        ("BASIC", "일반유저", 0, 0), ("SILVER", "Plus", 35000, 1),
+        ("GOLD", "VIP", 60000, 2), ("VIP", "Admin", 85000, 3)]]
     plans = [Plan(code=c, name=n, monthly_fee=f, data_mb=d, network=net) for c, n, f, d, net in [
         ("LTE_SLIM", "LTE 슬림", 25000, 6 * 1024, "LTE"),
         ("5G_BASIC", "5G Basic", 35000, 20 * 1024, "5G"),

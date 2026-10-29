@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import ErrorState from '../../components/common/ErrorState'
 import Loading from '../../components/common/Loading'
+import BlockNavigation from '../../components/common/BlockNavigation'
 import Tag from '../../components/common/Tag'
 import { ApiError, api } from '../../services/apiClient'
 import type { IpBlock, WhitelistEntry } from '../../services/types'
@@ -67,6 +68,7 @@ export default function AdminIpBlocksPage() {
   return (
     <section className="page page--wide">
       <h1 className="page__title">차단 IP 목록</h1>
+      <BlockNavigation />
       <p className="muted page__lead">차단된 IP의 요청은 앱에 닿기 전에 403으로 거부됩니다. 해제 예정 시각은 관리자에게만 보입니다. 내 IP {blocks.data.my_ip}</p>
       {msg && <div className={`notice ${msg.ok ? 'notice--ok' : 'notice--warn'}`} role="status">{msg.text}</div>}
 

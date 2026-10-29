@@ -65,7 +65,7 @@ export default function AdminDashboardPage() {
           <span className="tile__value">{protection.active_blocks}개</span>
           <span className="tile__sub">자동·수동 차단 포함</span>
         </Link>
-        <Link to="/admin/customers" className="tile">
+        <Link to="/admin/account-locks" className="tile">
           <span className="tile__label">잠긴 계정</span>
           <span className="tile__value">{protection.locked_accounts}개</span>
           <span className="tile__sub">로그인·세션 거부 중</span>
