@@ -1,0 +1,56 @@
+{
+  "created": {
+    "itemids": [
+      "50969",
+      "50970",
+      "50971",
+      "50972"
+    ]
+  },
+  "items": [
+    {
+      "hostid": "10683",
+      "name": "PC1 reachability: ICMP",
+      "key_": "icmpping[192.168.7.185]",
+      "type": 3,
+      "value_type": 3,
+      "delay": "30s",
+      "history": "7d",
+      "trends": "30d",
+      "description": "Dashboard network reachability; not a direct power sensor."
+    },
+    {
+      "hostid": "10683",
+      "name": "PC1 reachability: SSH TCP 22",
+      "key_": "net.tcp.service[tcp,192.168.7.185,22]",
+      "type": 3,
+      "value_type": 3,
+      "delay": "30s",
+      "history": "7d",
+      "trends": "30d",
+      "description": "Dashboard network reachability; not a direct power sensor."
+    },
+    {
+      "hostid": "10683",
+      "name": "PC2 reachability: ICMP",
+      "key_": "icmpping[192.168.7.100]",
+      "type": 3,
+      "value_type": 3,
+      "delay": "30s",
+      "history": "7d",
+      "trends": "30d",
+      "description": "Dashboard network reachability; not a direct power sensor."
+    },
+    {
+      "hostid": "10683",
+      "name": "PC2 reachability: SSH TCP 22",
+      "key_": "net.tcp.service[tcp,192.168.7.100,22]",
+      "type": 3,
+      "value_type": 3,
+      "delay": "30s",
+      "history": "7d",
+      "trends": "30d",
+      "description": "Dashboard network reachability; not a direct power sensor."
+    }
+  ]
+}

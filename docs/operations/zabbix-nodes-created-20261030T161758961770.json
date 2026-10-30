@@ -1,0 +1,56 @@
+{
+  "created": {
+    "itemids": [
+      "50965",
+      "50966",
+      "50967",
+      "50968"
+    ]
+  },
+  "items": [
+    {
+      "hostid": "10683",
+      "name": "PC1 reachability: ICMP",
+      "key_": "icmpping[192.168.3.18]",
+      "type": 3,
+      "value_type": 3,
+      "delay": "30s",
+      "history": "7d",
+      "trends": "30d",
+      "description": "Dashboard network reachability; not a direct power sensor."
+    },
+    {
+      "hostid": "10683",
+      "name": "PC1 reachability: agent TCP 10050",
+      "key_": "net.tcp.service[tcp,192.168.3.18,10050]",
+      "type": 3,
+      "value_type": 3,
+      "delay": "30s",
+      "history": "7d",
+      "trends": "30d",
+      "description": "Dashboard network reachability; not a direct power sensor."
+    },
+    {
+      "hostid": "10683",
+      "name": "PC2 reachability: ICMP",
+      "key_": "icmpping[192.168.3.19]",
+      "type": 3,
+      "value_type": 3,
+      "delay": "30s",
+      "history": "7d",
+      "trends": "30d",
+      "description": "Dashboard network reachability; not a direct power sensor."
+    },
+    {
+      "hostid": "10683",
+      "name": "PC2 reachability: agent TCP 10050",
+      "key_": "net.tcp.service[tcp,192.168.3.19,10050]",
+      "type": 3,
+      "value_type": 3,
+      "delay": "30s",
+      "history": "7d",
+      "trends": "30d",
+      "description": "Dashboard network reachability; not a direct power sensor."
+    }
+  ]
+}

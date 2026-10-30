@@ -1,0 +1,26 @@
+[
+  {
+    "itemid": "50965",
+    "hostid": "10683",
+    "key_": "icmpping[192.168.3.18]",
+    "name": "PC1 reachability: ICMP"
+  },
+  {
+    "itemid": "50966",
+    "hostid": "10683",
+    "key_": "net.tcp.service[tcp,192.168.3.18,10050]",
+    "name": "PC1 reachability: agent TCP 10050"
+  },
+  {
+    "itemid": "50967",
+    "hostid": "10683",
+    "key_": "icmpping[192.168.3.19]",
+    "name": "PC2 reachability: ICMP"
+  },
+  {
+    "itemid": "50968",
+    "hostid": "10683",
+    "key_": "net.tcp.service[tcp,192.168.3.19,10050]",
+    "name": "PC2 reachability: agent TCP 10050"
+  }
+]

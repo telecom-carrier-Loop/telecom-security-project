@@ -4,6 +4,7 @@ import { useApi } from '../../utils/useApi'
 type Point = { t: number; v: number }
 type Monitoring = {
   configured: boolean; connected: boolean; updated_at: string | null; message: string | null
+  nodes?: { name: string; ip: string; status: 'ON' | 'OFF' | 'UNKNOWN'; checked_at: number | null; message: string | null }[]
   services: { name: string; status: 'UP' | 'DOWN' | 'UNKNOWN'; checked_at: number | null }[]
   metrics: Record<string, number | null>; history: Record<string, Point[]>
   problems: { name: string; severity: number; clock: number }[]
@@ -11,8 +12,7 @@ type Monitoring = {
 
 const metrics: [string, string, string][] = [
   ['cpu', 'CPU 사용률', '%'], ['ram', 'RAM 사용률', '%'],
-  ['disk_c', 'C 드라이브', '%'], ['disk_d', 'D 드라이브', '%'],
-  ['rx', '이더넷 수신 (RX)', 'bps'], ['tx', '이더넷 송신 (TX)', 'bps'],
+  ['disk_c', 'C 드라이브', '%'],
 ]
 
 function Sparkline({ points }: { points: Point[] }) {
@@ -28,7 +28,6 @@ function Sparkline({ points }: { points: Point[] }) {
 
 function pretty(value: number | null | undefined, unit: string) {
   if (value == null) return '수집 대기'
-  if (unit === 'bps') return value >= 1e6 ? `${(value / 1e6).toFixed(2)} Mbps` : value >= 1e3 ? `${(value / 1e3).toFixed(1)} Kbps` : `${value.toFixed(0)} bps`
   return `${value.toFixed(1)}${unit}`
 }
 
@@ -48,6 +47,18 @@ export default function ZabbixMonitoringPanel() {
     {data && !data.connected && <p role="status" className="notice notice--warn">{data.message || 'Zabbix 연결 상태를 확인할 수 없습니다.'}</p>}
     {data?.connected && <>
       <p className="muted">{data.updated_at ? `마지막 조회: ${new Date(data.updated_at).toLocaleString('ko-KR')}` : '조회 시각 미제공'} · 30초마다 갱신 · 서비스별 측정 시각은 아래 표시</p>
+      <h3>Kubernetes VM 연결 상태</h3>
+      <p className="muted">ON은 네트워크 응답 확인, OFF는 Ping·SSH·등록 서비스 모두 응답 없음입니다. 전원 상태를 직접 측정하지 않으며, 방화벽·네트워크 장애도 OFF로 표시될 수 있습니다.</p>
+      <div className="grid grid--2">
+        {(data.nodes || []).map(node => <article className="tile" key={node.name}>
+          <span className="tile__label">{node.name} · {node.ip}</span>
+          <strong className="tile__value" style={{ color: node.status === 'ON' ? 'var(--ok)' : node.status === 'OFF' ? 'var(--danger)' : 'var(--ink-soft)' }}>
+            {node.status === 'UNKNOWN' ? '확인 불가' : node.status}
+          </strong>
+          <span className="tile__sub">{node.message || 'ICMP / SSH / 서비스 TCP 응답 기준'}</span>
+          <span className="tile__sub">마지막 측정 · {node.checked_at ? new Date(node.checked_at * 1000).toLocaleString('ko-KR') : '수집 대기'}</span>
+        </article>)}
+      </div>
       {data.services.some(s => s.status === 'DOWN') && <p className="notice notice--danger" role="status">TCP 연결 실패 {data.services.filter(s => s.status === 'DOWN').length}개 · 아래 서비스와 측정 시각을 확인하세요.</p>}
       <div className="grid grid--3">
         {data.services.map(service => <article key={service.name} className="tile">

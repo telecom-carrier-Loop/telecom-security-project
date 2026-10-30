@@ -26,6 +26,28 @@ SERVICE_PORTS = {
 }
 
 
+def _node_status(items, ip, now):
+    keys = (f'icmpping[{ip}]', f'net.tcp.service[tcp,{ip},22]',
+            *(f"net.tcp.service[tcp,{address.replace(':', ',')}]" for address in SERVICE_PORTS if address.startswith(ip + ':')))
+    checks = []
+    for key in keys:
+        item = next((x for x in items if x.get('key_') == key), None)
+        if not item or str(item.get('status', '0')) != '0' or str(item.get('state', '0')) != '0':
+            continue
+        try:
+            clock = int(item.get('lastclock', 0))
+            value = float(item['lastvalue'])
+        except (TypeError, ValueError, KeyError):
+            continue
+        if clock <= 0 or not 0 <= now - clock <= 180 or value not in (0, 1):
+            continue
+        checks.append((value, clock))
+    status = 'ON' if any(v == 1 for v, _ in checks) else 'OFF' if len(checks) == len(keys) else 'UNKNOWN'
+    return {'status': status, 'checked_at': max((t for _, t in checks), default=None),
+            'method': 'ICMP·SSH·등록 서비스 TCP 응답',
+            'message': None if status != 'UNKNOWN' else '감시 항목 미설정·수집 지연 또는 데이터 확인 불가'}
+
+
 def _rpc(method, params, base_url, token):
     response = requests.post(
         base_url,
@@ -66,7 +88,7 @@ def zabbix_dashboard():
     base = os.getenv('ZABBIX_API_URL', '').strip()
     token = os.getenv('ZABBIX_API_TOKEN', '').strip()
     result = {'configured': bool(base and token), 'connected': False, 'updated_at': None,
-              'services': [], 'metrics': {}, 'history': {}, 'problems': [], 'message': None}
+              'nodes': [], 'services': [], 'metrics': {}, 'history': {}, 'problems': [], 'message': None}
     if not result['configured']:
         result['message'] = 'ZABBIX_API_URL 및 ZABBIX_API_TOKEN 서버 환경변수를 설정하세요.'
         return ok(result)
@@ -83,9 +105,14 @@ def zabbix_dashboard():
             result['message'] = 'Zabbix에서 대상 호스트를 찾지 못했습니다. 계정 읽기 권한과 호스트 이름을 확인하세요.'
             return ok(result)
         items = _rpc('item.get', {
-            'output': ['itemid', 'hostid', 'name', 'key_', 'lastvalue', 'lastclock', 'units', 'value_type'],
+            'output': ['itemid', 'hostid', 'name', 'key_', 'lastvalue', 'lastclock', 'units', 'value_type', 'status', 'state'],
             'hostids': list(ids.values()), 'filter': {'status': 0}, 'limit': 2000,
         }, base, token)
+        now = int(time.time())
+        for name, ip in [('PC1', os.getenv('ZABBIX_PC1_IP', '192.168.7.185')),
+                         ('PC2', os.getenv('ZABBIX_PC2_IP', '192.168.7.100'))]:
+            node_items = [x for x in items if x['hostid'] == ids.get(TARGETS['services'])]
+            result['nodes'].append({'name': name, 'ip': ip, **_node_status(node_items, ip, now)})
         service_items = [x for x in items if x['hostid'] == ids.get(TARGETS['services'])
                          and x.get('key_', '').startswith('net.tcp.service[')]
         for label_key, label in SERVICE_PORTS.items():
@@ -99,9 +126,6 @@ def zabbix_dashboard():
         selectors = {
             'cpu': ['CPU utilization'], 'ram': ['Memory utilization'],
             'disk_c': ['FS [(C:)]: Space: Used, in %'],
-            'disk_d': ['FS [새 볼륨 (D:)]: Space: Used, in %'],
-            'rx': ['Realtek PCIe GbE Family Controller(이더넷): Bits received'],
-            'tx': ['Realtek PCIe GbE Family Controller(이더넷): Bits sent'],
         }
         # Template names can vary; not finding an item returns null rather than invented values.
         for key, patterns in selectors.items():
