@@ -117,6 +117,8 @@ class ReleaseTests(unittest.TestCase):
                 return json.dumps({'data': {'nginx.conf': CONFIG}})
             if args[:3] == ['get', 'deployment', 'telecom-admin-edge']:
                 return json.dumps({'status': {'readyReplicas': ready}})
+            if args[:3] == ['get', 'deployment', 'telecom-edge-proxytest']:
+                return ''
             if args[0] == 'exec' and 'nginx' in args:
                 return live_config
             if args[0] == 'exec' and 'python' in args:
@@ -132,6 +134,74 @@ class ReleaseTests(unittest.TestCase):
         calls = self.check_policy()
         self.assertEqual(len([c for c in calls if 'nginx' in c]), 2)
         self.assertEqual(len([c for c in calls if 'python' in c]), 2)
+
+    def check_proxy_policy(self, *, bad_service=False, stale_pod=False, missing_helper=False):
+        source = Path(release.__file__).parent.parent / 'loop-client-ip-test.py'
+        spec = importlib.util.spec_from_file_location('test_proxy_tool', source)
+        trial = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(trial)
+        base = CONFIG.replace('listen 8443 ssl;',
+                              'listen 8443 ssl;\n    proxy_set_header X-Forwarded-For $remote_addr;')
+        config = trial.make_config(base, '192.0.2.10')
+        items, _, _ = trial.build_resources(
+            {'spec': {'template': {'spec': {
+                'containers': [{'name': 'edge', 'command': ['nginx'], 'image': 'cached',
+                    'imagePullPolicy': 'Never', 'ports': [{'name': 'https', 'containerPort': 8443}],
+                    'readinessProbe': {'httpGet': {'port': 'https', 'path': '/edge-health'}},
+                    'livenessProbe': {'httpGet': {'port': 'https', 'path': '/edge-health'}}}],
+                'volumes': [{'configMap': {'name': 'telecom-edge-config'}},
+                            {'name': 'tls', 'secret': {'secretName': 'existing'}}]}}}},
+            base, '192.0.2.10', 'test', ['pc1-k3s', 'pc2-k3s'])
+        service = items[2]
+        if bad_service:
+            service['spec']['externalTrafficPolicy'] = 'Cluster'
+        calls = []
+        def fake_k(args, data=None):
+            calls.append(args)
+            self.assertIn(args[0], ('get', 'exec'))
+            if args[:3] == ['get', 'deployment', trial.TRIAL]:
+                return json.dumps({'metadata': {'name': trial.TRIAL}})
+            if args[:3] == ['get', 'service', trial.TRIAL]:
+                return json.dumps(service)
+            if args[:3] == ['get', 'configmap', trial.CM]:
+                return json.dumps({'data': {'nginx.conf': config}})
+            if args[0] == 'exec':
+                return base if stale_pod and args[1].endswith('-2') else config
+            raise AssertionError(args)
+        with patch.object(release, 'k', side_effect=fake_k), \
+             patch.object(release, 'pods', return_value=[{'metadata': {'name': 'proxy-' + str(i)}} for i in (1, 2)]):
+            if missing_helper:
+                with patch.object(release.Path, 'is_file', return_value=False):
+                    release.verify_proxy_edge_policy(release.edge_policy_tool())
+            else:
+                release.verify_proxy_edge_policy(release.edge_policy_tool())
+        return calls
+
+    def test_proxy_guard_checks_service_configmap_and_both_effective_pods(self):
+        calls = self.check_proxy_policy()
+        self.assertEqual(len([c for c in calls if c[0] == 'exec']), 2)
+
+    def test_proxy_guard_rejects_cluster_routing_and_one_stale_pod(self):
+        for kwargs in ({'bad_service': True}, {'stale_pod': True}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(RuntimeError):
+                self.check_proxy_policy(**kwargs)
+
+    def test_standalone_proxy_guard_and_missing_helper(self):
+        with tempfile.TemporaryDirectory(dir=self.test_root) as directory:
+            target = Path(directory)
+            tools = Path(release.__file__).parent.parent
+            for source in (Path(release.__file__), tools / 'k3s-admin-access.py', tools / 'loop-client-ip-test.py'):
+                shutil.copyfile(source, target / source.name)
+            spec = importlib.util.spec_from_file_location('standalone_proxy_release', target / 'release.py')
+            standalone = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(standalone)
+            # Absent trial is compatible with an unmodified cluster; no writes occur.
+            with patch.object(standalone, 'k', return_value=''):
+                standalone.verify_proxy_edge_policy(standalone.edge_policy_tool())
+            (target / 'loop-client-ip-test.py').unlink()
+            with patch.object(standalone, 'k', return_value='{}'):
+                with self.assertRaisesRegex(RuntimeError, 'Missing loop-client-ip-test.py'):
+                    standalone.verify_proxy_edge_policy(standalone.edge_policy_tool())
 
     def test_stale_edge_private_outage_or_bad_auth_fail_release(self):
         for kwargs in ({'live_config': CONFIG.replace('location = /admin { return 404; }', '')},

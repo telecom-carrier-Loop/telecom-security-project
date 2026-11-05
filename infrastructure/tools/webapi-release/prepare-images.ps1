@@ -15,7 +15,7 @@ Check-Native 'Start Docker Desktop first.'
 if (($dockerOs -join '').Trim() -ne 'linux') { throw 'Linux containers are required.' }
 git clone --no-checkout --filter=blob:none --branch main --single-branch https://github.com/telecom-carrier-Loop/telecom-security-project.git $source
 Check-Native 'Git clone failed.'
-git -C $source sparse-checkout set --no-cone '/backend/' '/frontend/' '/infrastructure/docker/' '/infrastructure/tools/webapi-release/release.py' '/infrastructure/tools/k3s-admin-access.py'
+git -C $source sparse-checkout set --no-cone '/backend/' '/frontend/' '/infrastructure/docker/' '/infrastructure/tools/webapi-release/release.py' '/infrastructure/tools/k3s-admin-access.py' '/infrastructure/tools/loop-client-ip-test.py'
 Check-Native 'Cannot select build directories.'
 git -C $source fetch origin main
 Check-Native 'Git fetch failed.'
@@ -69,11 +69,12 @@ $metadata = @{
 # Package validators from the same clean source revision as the images.
 Copy-Item -LiteralPath (Join-Path $source 'infrastructure\tools\webapi-release\release.py') -Destination (Join-Path $release 'release.py')
 Copy-Item -LiteralPath (Join-Path $source 'infrastructure\tools\k3s-admin-access.py') -Destination (Join-Path $release 'k3s-admin-access.py')
+Copy-Item -LiteralPath (Join-Path $source 'infrastructure\tools\loop-client-ip-test.py') -Destination (Join-Path $release 'loop-client-ip-test.py')
 $remote = "/home/loop/telecom-releases/$tag"
 foreach ($vm in @('192.168.7.185', '192.168.7.100')) {
     ssh "loop@$vm" "install -d -m 700 $remote"
     Check-Native "Cannot prepare VM: $vm"
-    scp $archive (Join-Path $release 'release.json') (Join-Path $release 'release.py') (Join-Path $release 'k3s-admin-access.py') "loop@${vm}:${remote}/"
+    scp $archive (Join-Path $release 'release.json') (Join-Path $release 'release.py') (Join-Path $release 'k3s-admin-access.py') (Join-Path $release 'loop-client-ip-test.py') "loop@${vm}:${remote}/"
     Check-Native "Transfer failed: $vm"
     ssh "loop@$vm" "printf '%s\n' '$remote' > /home/loop/.telecom-clean-release"
     Check-Native "Cannot save release pointer: $vm"

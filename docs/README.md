@@ -11,6 +11,8 @@
 
 ## 최신 현장 기록
 
+- [2026-11-05 실제 출발지 전달: API·Wazuh 확인과 자동 차단 미확인 범위](operations/2026-11-05-client-ip-handoff.md) · [설정·재배포·복구](runbooks/academy-client-ip-preservation.md)
+
 - [2026-11-04 공개 관리자 404·재배포 정책과 남은 PC/VPN 검증](operations/2026-11-04-public-admin-guard.md)
 
 - [PC2 Primary 예약 백업·Discord 감시: 기존 작업 유지와 비활성 준비 절차](runbooks/mysql84-primary-schedule.md)

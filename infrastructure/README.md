@@ -13,3 +13,5 @@ local Compose, db-lab과 공용 PC용 MySQL Compose를 작성했습니다. 앱 �
 [인프라 시작 가이드](../docs/operations/infra-start-here.md) · [검증 기록](../docs/operations/infra-verification.md)
 
 [실행 계약](../docs/contracts/runtime.md) · [k3s 네트워크](../docs/contracts/k8s-network.md) · [포트](../network/port-matrix.md)
+
+[2026-11-05 공개 HTTPS 실제 출발지 전달](../docs/runbooks/academy-client-ip-preservation.md): PROXY v2 시험 edge 생성과 기존 정책 보존, 활성 edge를 포함한 릴리스 검사 및 pfSense 복구 절차.

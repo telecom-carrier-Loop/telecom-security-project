@@ -231,6 +231,7 @@ def verify_admin_edge_policy():
     for pod in pods('telecom-edge'):
         config = k(['exec', pod['metadata']['name'], '-c', 'edge', '--', 'nginx', '-T'])
         policy.assert_public_admin_blocked(config)
+    verify_proxy_edge_policy(policy)
     private_edge = json.loads(k(['get', 'deployment', 'telecom-admin-edge', '-o', 'json']))
     if private_edge.get('status', {}).get('readyReplicas', 0) < 1:
         raise RuntimeError('Private admin edge must have a Ready replica before release.')
@@ -242,6 +243,35 @@ def verify_admin_edge_policy():
             raise RuntimeError('API ADMIN authorization audit failed.')
     print('PASS: public admin/internal 404 policy and customer upstreams verified in ConfigMap and both Pods.')
     print('PASS: private admin edge Ready; API ADMIN protection verified. HTTP/login/PC/VPN tests still required.')
+
+
+def verify_proxy_edge_policy(policy):
+    """Also inspect the independently deployed public PROXY edge, when present."""
+    found = k(['get', 'deployment', 'telecom-edge-proxytest', '--ignore-not-found', '-o', 'json'])
+    if not found.strip():
+        return
+    directory = Path(__file__).resolve().parent
+    source = directory / 'loop-client-ip-test.py'
+    if not source.is_file() and directory.name == 'webapi-release':
+        source = directory.parent / 'loop-client-ip-test.py'
+    if not source.is_file():
+        raise RuntimeError('Missing loop-client-ip-test.py in release package. Rebuild the package.')
+    spec = importlib.util.spec_from_file_location('client_ip_policy', source)
+    trial = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(trial)
+    service = json.loads(k(['get', 'service', trial.TRIAL, '-o', 'json']))['spec']
+    ports = service.get('ports', [])
+    if (service.get('type') != 'NodePort' or service.get('externalTrafficPolicy') != 'Local'
+            or service.get('selector') != {'app': trial.TRIAL} or len(ports) != 1
+            or ports[0].get('port') != 443 or ports[0].get('protocol') != 'TCP'
+            or ports[0].get('nodePort') != trial.NODEPORT or ports[0].get('targetPort') != trial.LISTENER):
+        raise RuntimeError('Unexpected PROXY public Service routing')
+    current = json.loads(k(['get', 'configmap', trial.CM, '-o', 'json']))
+    peer = trial.assert_proxy_config(current['data']['nginx.conf'], policy)
+    for pod in pods(trial.TRIAL):
+        effective = k(['exec', pod['metadata']['name'], '-c', 'edge', '--', 'nginx', '-T'])
+        trial.assert_proxy_config(effective, policy, expected_peer=peer)
+    print('PASS: PROXY public edge Local routing, exact peer, denials and both effective Pods verified.')
 
 
 def verify(directory, metadata):

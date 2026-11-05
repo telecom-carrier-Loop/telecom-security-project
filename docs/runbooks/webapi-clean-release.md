@@ -14,6 +14,8 @@
 
 DB migration·역할 변경·계정 생성은 자동 실행하지 않는다. 새 DB 스키마가 필요한 릴리스는 별도 migration 계획을 마련한다. React `VITE_*`는 빌드 시점 값이다.
 
+2026-11-05부터 `telecom-edge-proxytest`가 있으면 PROXY용 Service의 Local/포트/selector와 ConfigMap·두 실행 Pod의 출발지 신뢰/차단 정책도 검사한다. 준비 도구가 `loop-client-ip-test.py`를 함께 전달한다. 기존 `telecom-edge` 검사도 유지하며 pfSense의 실제 연결 대상은 [실제 IP 전달 절차](academy-client-ip-preservation.md)에 따라 현장에서 확인한다.
+
 시작 전 PR이 main에 병합됐는지 확인한다. 두 노드와 API/Web/공개 Edge는 각각 두 Pod Ready, 노드별 한 Pod여야 한다. 관리 Edge도 Ready여야 한다. 공개 관리자 차단과 관리 전용 로그인·조회를 먼저 확인한다. `.env`, 토큰, 원시 백업·릴리스 상태를 Git이나 채팅에 올리지 않는다.
 
 ## PC1 Windows: 도구 받기와 빌드·전송
